@@ -16,6 +16,7 @@
 ---   * a clone without its own `.git` directory, and one whose `index.lock` is
 ---     held (lazy.nvim or another git process is in the middle of it).
 
+local adapter = require("gitsuite.adapter")
 local async = require("lib.nvim.async")
 local config = require("gitsuite.config")
 local gitfs = require("gitsuite.features.plugins.gitfs")
@@ -52,8 +53,8 @@ end
 ---Why no fetch may start now, or `nil`: lazy.nvim is working on plugins.
 ---@return string|nil
 function M.busy()
-  local ok, lazy = pcall(require, "gitsuite.adapter.lazy")
-  if not ok or not lazy.is_available() then return nil end
+  local lazy = adapter.resolve("lazy")
+  if not lazy then return nil end
   local names = lazy.working()
   if #names == 0 then return nil end
   local shown = {}

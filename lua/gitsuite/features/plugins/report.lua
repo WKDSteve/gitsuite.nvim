@@ -20,6 +20,7 @@
 --- Nothing here writes a clone, fetches or installs; the one thing written is
 --- the report itself (`state`).
 
+local adapter = require("gitsuite.adapter")
 local async = require("lib.nvim.async")
 local breaking = require("gitsuite.features.plugins.breaking")
 local config = require("gitsuite.config")
@@ -500,8 +501,8 @@ end
 ---@return GitSuite.Plugins.Job[] jobs
 ---@return table meta
 local function plan_pending(refs, ctx)
-  local lazy_ok, lazy = pcall(require, "gitsuite.adapter.lazy")
-  local defaults_version = lazy_ok and lazy.is_available() and lazy.defaults_version() or nil
+  local lazy = adapter.resolve("lazy")
+  local defaults_version = lazy and lazy.defaults_version() or nil
   local jobs = {}
   for _, ref in ipairs(refs) do
     guarded(ctx, ref, "pending", function()
@@ -768,8 +769,8 @@ function M.build(opts, on_done)
     end
 
     local lazy_version
-    local lazy_ok, lazy = pcall(require, "gitsuite.adapter.lazy")
-    if lazy_ok and lazy.is_available() then lazy_version = lazy.version() end
+    local lazy = adapter.resolve("lazy")
+    if lazy then lazy_version = lazy.version() end
 
     ---@type GitSuite.Plugins.Report
     local report = {
