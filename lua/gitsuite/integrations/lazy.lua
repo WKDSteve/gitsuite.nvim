@@ -50,12 +50,29 @@ M.DELAY_MS = 200
 ---`setup()`, so a second call does not add a second listener).
 M.GROUP = "gitsuite_lazy_sync"
 
----@type uv.uv_timer_t|nil
-local pending
-
 ---`os.time()` of the last `User LazySyncPre` not yet consumed by a build.
 ---@type integer|nil
 local started_at
+
+---The debounce between `User LazySync` and the build (lib.nvim.debounce): repeated events fold into one run
+---with the arguments of the last. Rebuilt when `M.DELAY_MS` changed since it was made.
+---@type Lib.Debounce.Handle|nil
+local debounced
+---@type integer|nil
+local debounced_ms
+
+---@return Lib.Debounce.Handle
+local function debounce_handle()
+  if not debounced or debounced_ms ~= M.DELAY_MS then
+    if debounced then debounced.cancel() end
+    debounced_ms = M.DELAY_MS
+    debounced = require("lib.nvim.debounce").new(function(mode, baseline)
+      started_at = nil
+      M.run(mode, baseline)
+    end, M.DELAY_MS)
+  end
+  return debounced
+end
 
 ---Whether a UI is attached (`nvim --headless` has none).
 ---@return boolean
@@ -207,27 +224,11 @@ end
 ---@return nil
 function M.on_sync(mode)
   if not has_ui() then return end
-  if pending then
-    pending:stop()
-    pending:close()
-  end
   ---@type GitSuite.LazySync.Baseline
   local baseline = { since = started_at }
   -- (read now, while lazy.nvim's record is the one of this sync)
   if not baseline.since then baseline.moved = M.lazy_moved() end
-  local timer = assert((vim.uv or vim.loop).new_timer())
-  pending = timer
-  timer:start(
-    M.DELAY_MS,
-    0,
-    vim.schedule_wrap(function()
-      if pending ~= timer then return end
-      pending = nil
-      timer:close()
-      started_at = nil
-      M.run(mode, baseline)
-    end)
-  )
+  debounce_handle().call(mode, baseline)
 end
 
 ---Whether this code runs inside a `User LazySync` autocmd -- e.g. lazy.nvim
@@ -249,11 +250,7 @@ function M.setup(cfg)
     pcall(vim.api.nvim_del_augroup_by_name, M.GROUP)
     -- Off means off: no build of a sync seen before, and a later "toast" does
     -- not take an old `LazySyncPre` for its own sync's start.
-    if pending then
-      pending:stop()
-      pending:close()
-      pending = nil
-    end
+    if debounced then debounced.cancel() end
     started_at = nil
     return
   end
