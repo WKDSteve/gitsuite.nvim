@@ -51,6 +51,25 @@ return {
         "\\gb",
         "\\lg",
       },
+      -- lib.nvim's roots registry exports its roots to child processes on first use
+      -- (lib.nvim.fs.roots: `NVIM_CONFIG_DIR` and the marker that tells a child the export is its own);
+      -- it is process-wide on purpose and never removed.
+      ignore_env = { "LIB_NVIM_ROOTS_EXPORTED", "NVIM_CONFIG_DIR" },
+      -- plugin/gitsuite.lua's load lock: set once per process, a second load must find it.
+      ignore_vars = { "loaded_gitsuite" },
+      -- Highlight groups are listed as info, not warned about: what is left are the syntax groups of the
+      -- editor's runtime (css, dtd, lua, qf, ...), which the report, blame and diff specs load when they
+      -- render fenced blocks, quickfix text or buffers of those filetypes. The set changes with the
+      -- runtime and the specs define none of them.
+      categories = { highlights = "info" },
+      ignore_highlights = {
+        -- the Kit* groups of lib.nvim's ui kit (shared with ui.nvim): defined once per process by the
+        -- first kit surface a spec opens, re-linked on ColorScheme, so a spec must not delete them.
+        "Kit",
+        -- GitSuitePluginsSha is the plugins report's own group, defined when its renderer is first loaded
+        -- and re-linked on ColorScheme (gitsuite_plugins_report_hl above).
+        "GitSuite",
+      },
     },
     scheduled_error = "error",
     prompt = "error",
