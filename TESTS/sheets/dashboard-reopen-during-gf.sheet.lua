@@ -271,7 +271,7 @@ return {
     "With your real repositories over the network: :Git dashboard, gf, close the popup before all repositories are through, :Git dashboard again; the rows go on and all settle",
     "A second gf in the reopened dashboard says 'A bulk fetch is already running' while the first runs",
     "A remote that fails (offline, no access) shows ✗ fetch failed in the reopened dashboard, the closing message names it",
-    "In a Neovim without a notifier plugin or fidget (progress_style 'auto' falls back to vim.notify): :Git dashboard on a directory with many clones opens without a 'Press ENTER' prompt during the scan",
+    "In a Neovim without a notifier plugin or fidget (progress_style 'auto' now picks the echo style there, see util/progress.lua): :Git dashboard on a directory with many clones opens without a 'Press ENTER' prompt during the scan",
     "Enter findings under 'Befunde' in docs/ROADMAP/Final_Checks/gitsuite-live-checks-2026-10-22.md (nvim config), each as a kind: bug task",
   },
 }

@@ -25,6 +25,23 @@ local M = {}
 
 local ok_progress, progress_mod = pcall(require, "lib.nvim.progress")
 
+---True when `vim.notify` is still Neovim's own (no notifier plugin replaced it).
+---@return boolean
+local function stock_notify()
+  local info = debug.getinfo(vim.notify, "S")
+  return info ~= nil and info.source:find("vim/_editor.lua", 1, true) ~= nil
+end
+
+---"auto" means fidget, else `vim.notify`. With the stock `vim.notify` that is one message per
+---repository, which fills the command line and raises a "Press ENTER" prompt in the middle of
+---the scan; the `echo` style rewrites one line instead.
+---@param style string
+---@return string
+function M.resolve_style(style)
+  if style ~= "auto" or pcall(require, "fidget") or not stock_notify() then return style end
+  return "echo"
+end
+
 ---Starts a progress handle, or returns nil when lib.nvim isn't installed.
 ---@param text string Initial message, shown after the "[gitsuite]" title
 ---@param total integer|nil Total unit count, when the operation is countable
@@ -36,7 +53,7 @@ function M.create(text, total)
   local ok_cfg, config = pcall(require, "gitsuite.config")
   if ok_cfg then style = config.get().progress_style or style end
 
-  local handle = progress_mod.create({ title = "[gitsuite]", style = style })
+  local handle = progress_mod.create({ title = "[gitsuite]", style = M.resolve_style(style) })
   handle:update({ text = text, current = 0, total = total })
   return handle
 end

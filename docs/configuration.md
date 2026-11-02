@@ -272,7 +272,7 @@ them; without it the newest 100 subjects decide (less than half conventional =
 ## `progress_style`
 
 ```lua
-progress_style = "auto", -- "auto" | "notify" | "statusline" | "fidget" | "float" | "kit"
+progress_style = "auto", -- "auto" | "notify" | "statusline" | "echo" | "fidget" | "float" | "kit"
 ```
 
 Indicator style for `:Git dashboard`/`:Git dashboard update` over many
@@ -282,6 +282,10 @@ one. Backed by
 [`lib.nvim.progress`](https://github.com/WKDSteve/lib.nvim/blob/main/lua/lib/nvim/progress/README.md);
 `lib.nvim` is a hard dependency of gitsuite.nvim already, so this is never a
 no-op in practice.
+
+`"auto"` uses fidget when it is installed. Without it, a Neovim whose `vim.notify` is
+still the stock one gets `"echo"` (one rewritten command-line line, no "Press ENTER"
+prompt in the middle of the scan); with a notifier plugin it stays on `vim.notify`.
 
 ## See also
 
