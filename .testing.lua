@@ -15,8 +15,8 @@ return {
   isolated = "file",
   -- "c" = child started from a -c command (v:vim_did_enter is 0), "l" = `nvim -l` like the old runner.
   host = "c",
-  -- Limits per case in milliseconds (the slowest spec file takes about 21 s).
-  timeouts = { case_ms = 30000 },
+  -- Limits in milliseconds: per case, and per spec file (conflict_git_spec runs real `git merge` processes: about 90 s on Windows).
+  timeouts = { case_ms = 30000, file_ms = 180000 },
   -- Safety nets (docs/GUARDS.md). "error" = the suite passes them cleanly, so a regression fails the run.
   guards = {
     -- Real finding, kept at "warn": browse_spec, lazygit_bridge_spec and status_spec write scratch files
