@@ -794,6 +794,7 @@ local function _open_readme(record, before_open)
   kit.confirm({
     question = ('Open README.md of "%s"?'):format(record.name),
     choices = { "Open README.md", "Browse files…" },
+    default = 1,
     on_answer = function(choice)
       if choice == "Open README.md" then
         _open_repo_path(readme_path, before_open)
@@ -1361,6 +1362,7 @@ local function _pull_all(ctx)
   kit.confirm({
     question = plan.question,
     choices = plan.choices,
+    default = 1,
     on_answer = function(choice)
       local indices = choice and plan.targets[choice]
       if not indices then return end
