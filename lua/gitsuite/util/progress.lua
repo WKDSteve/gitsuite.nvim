@@ -28,6 +28,8 @@ local ok_progress, progress_mod = pcall(require, "lib.nvim.progress")
 ---True when `vim.notify` is still Neovim's own (no notifier plugin replaced it).
 ---@return boolean
 local function stock_notify()
+  -- (a notifier can be a callable table: `debug.getinfo` only takes a function)
+  if type(vim.notify) ~= "function" then return false end
   local info = debug.getinfo(vim.notify, "S")
   return info ~= nil and info.source:find("vim/_editor.lua", 1, true) ~= nil
 end

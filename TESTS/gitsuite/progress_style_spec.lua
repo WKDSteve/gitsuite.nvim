@@ -38,6 +38,14 @@ describe("gitsuite.util.progress.resolve_style", function()
     assert.equals("auto", progress.resolve_style("auto"))
   end)
 
+  it("leaves auto alone when vim.notify is a callable table", function()
+    vim.notify = setmetatable({}, { __call = function() end })
+    package.preload.fidget = function()
+      error("no fidget")
+    end
+    assert.equals("auto", progress.resolve_style("auto"))
+  end)
+
   it("leaves auto alone when fidget is there", function()
     package.preload.fidget = function()
       return {}
