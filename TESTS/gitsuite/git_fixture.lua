@@ -37,10 +37,25 @@ function M.git(dir, ...)
   return vim.trim(res.stdout or "")
 end
 
+---A path with forward slashes, whatever else it holds: `vim.fs.normalize` alone would expand a `$` in it.
+---@param path string
+---@return string
+function M.path(path)
+  return vim.fs.normalize(path, { expand_env = false })
+end
+
+---A path as a value in git's config file. Quoted: unquoted, a `#` or `;` in it starts a comment.
+---@param path string
+---@return string
+function M.config_value(path)
+  local escaped = M.path(path):gsub('[\\"]', "\\%0")
+  return '"' .. escaped .. '"'
+end
+
 ---A folder for a template. Never deleted by hand: nvim removes its temp folder on exit.
 ---@return string
 function M.template_root()
-  local root = vim.fs.normalize(vim.fn.tempname())
+  local root = M.path(vim.fn.tempname())
   vim.fn.mkdir(root, "p")
   return root
 end
@@ -81,8 +96,7 @@ function M.point_remote(clone, name, url)
   rfd:close()
   local pattern = '(%[remote "' .. vim.pesc(name) .. '"%]\r?\n%s*url = )[^\r\n]*'
   local new, count = text:gsub(pattern, function(head)
-    -- A backslash is an escape in git's config file.
-    return head .. vim.fs.normalize(url)
+    return head .. M.config_value(url)
   end)
   if count ~= 1 then error(("%s: no url of remote %q in: %s"):format(path, name, text)) end
   local wfd = assert(io.open(path, "wb"))

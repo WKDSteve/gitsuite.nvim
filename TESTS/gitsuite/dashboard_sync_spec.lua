@@ -46,7 +46,7 @@ describe("gitsuite.features.dashboard.actions.sync (real git, local remote)", fu
   local root, remote, a, b
 
   -- How long a case waits for git's answer: seconds per process on a loaded machine, and a push starts
-  -- several. Stays under the case's budget of 30 s, so a broken case fails on its assertion.
+  -- several. Under the case's budget of 30 s, so a case that does nothing else fails on its assertion.
   local WAIT_MS = 28000
 
   ---Runs `actions.sync` on `dir` and waits for its answer.
@@ -86,7 +86,7 @@ describe("gitsuite.features.dashboard.actions.sync (real git, local remote)", fu
   end
 
   before_each(function()
-    root = vim.fs.normalize(vim.fn.tempname())
+    root = F.path(vim.fn.tempname())
     F.copy(TEMPLATE, root)
     remote = root .. "/remote.git"
     a, b = root .. "/a", root .. "/b"
@@ -190,18 +190,20 @@ describe("gitsuite.features.dashboard.actions.sync (real git, local remote)", fu
     local function build_template()
       -- A folder of its own: what lies in TEMPLATE is copied for every case of this file.
       local tpl_root = F.template_root()
-      tpl_tri, tpl_fork = tpl_root .. "/tri", tpl_root .. "/fork.git"
-      F.copy(TEMPLATE .. "/a", tpl_tri)
-      F.copy(TEMPLATE .. "/remote.git", tpl_fork)
+      local built_tri, built_fork = tpl_root .. "/tri", tpl_root .. "/fork.git"
+      F.copy(TEMPLATE .. "/a", built_tri)
+      F.copy(TEMPLATE .. "/remote.git", built_fork)
       F.append_config(
-        tpl_tri,
-        ('[remote "fork"]\n\turl = %s\n'):format(tpl_fork)
+        built_tri,
+        ('[remote "fork"]\n\turl = %s\n'):format(F.config_value(built_fork))
           .. "\tfetch = +refs/heads/*:refs/remotes/fork/*\n"
           .. "[remote]\n\tpushDefault = fork\n"
       )
-      commit(tpl_tri, "t1")
-      commit(tpl_tri, "t2")
-      git(tpl_tri, "push", "-q", "fork", "main")
+      commit(built_tri, "t1")
+      commit(built_tri, "t2")
+      git(built_tri, "push", "-q", "fork", "main")
+      -- Only now: a build that raised half way is built again by the next case, not used.
+      tpl_tri, tpl_fork = built_tri, built_fork
     end
 
     before_each(function()

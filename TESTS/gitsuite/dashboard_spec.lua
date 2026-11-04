@@ -15,11 +15,11 @@ describe("gitsuite.features.dashboard", function()
 
   -- How long a case waits for an answer that real git processes give: on a loaded machine each of
   -- them takes seconds, and a push starts several. Only a broken case ever waits this long; it stays
-  -- under the case's own budget of 30 s, so such a case fails on its assertion and names it.
+  -- under the case's own budget of 30 s, so a case that does nothing else fails on its assertion.
   local WAIT_MS = 28000
 
   local function tmpdir(suffix)
-    local dir = vim.fs.normalize(vim.fn.tempname() .. suffix)
+    local dir = F.path(vim.fn.tempname() .. suffix)
     vim.fn.mkdir(dir, "p")
     return dir
   end
