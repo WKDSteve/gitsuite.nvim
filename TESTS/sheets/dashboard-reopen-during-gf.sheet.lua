@@ -45,14 +45,6 @@ return {
       -- snapshots); a fixed date would turn into "10y" one day and widen the column
       local date = os.date("!%Y-%m-%dT12:00:00Z", os.time() - 400 * 86400)
       local env = { GIT_AUTHOR_DATE = date, GIT_COMMITTER_DATE = date }
-      local function git(dir, args)
-        local argv = { "git", "-c", "user.name=sheet", "-c", "user.email=sheet@example.invalid",
-          "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false", "-c", "init.defaultBranch=main" }
-        if dir then vim.list_extend(argv, { "-C", dir }) end
-        vim.list_extend(argv, args)
-        local res = vim.system(argv, { text = true, env = env }):wait()
-        assert(res.code == 0, "git " .. table.concat(args, " ") .. ": " .. (res.stderr or ""))
-      end
       local function write(path, text)
         local f = assert(io.open(path, "wb"))
         f:write(text)
@@ -61,16 +53,72 @@ return {
       local function url(path)
         return "file://" .. (path:sub(1, 1) == "/" and "" or "/") .. path
       end
-      -- one repository per step: six git processes each, and a step's RPC call has 10 s
+      -- One remote and one clone are built with git, the repositories are copies of them. git is
+      -- what costs here (about 0.7 s per process on Windows, more under load): a clone of their own
+      -- by git took 42 processes, 29 s of the 30 s a case has. It runs asynchronously, so the child
+      -- keeps answering: a step that blocks in git under load runs past the 10 s of its RPC call.
+      local tpl_work = root .. "/work/template"
+      local tpl_remote, tpl_clone = root .. "/template/remote.git", root .. "/template/clone"
+      local template_status = "not started"
+      _G.build_template = function()
+        local calls = {
+          { nil, { "init", "-q", "-b", "main", tpl_work } },
+          { tpl_work, { "commit", "-q", "--allow-empty", "-m", "first" } },
+          { nil, { "clone", "-q", "--bare", tpl_work, tpl_remote } },
+          { nil, { "clone", "-q", url(tpl_remote), tpl_clone } },
+          -- the remote moves on: after the fetch every clone is one behind
+          { tpl_work, { "commit", "-q", "--allow-empty", "-m", "second" } },
+          { tpl_work, { "push", "-q", url(tpl_remote), "main" } },
+        }
+        local function run(i)
+          local call = calls[i]
+          if not call then
+            template_status = "ready"
+            return
+          end
+          template_status = "at: git " .. table.concat(call[2], " ")
+          local argv = { "git", "-c", "user.name=sheet", "-c", "user.email=sheet@example.invalid",
+            "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false", "-c", "init.defaultBranch=main" }
+          if call[1] then vim.list_extend(argv, { "-C", call[1] }) end
+          vim.list_extend(argv, call[2])
+          vim.system(argv, { text = true, env = env }, vim.schedule_wrap(function(res)
+            if res.code == 0 then
+              run(i + 1)
+            else
+              template_status = "failed: git " .. table.concat(call[2], " ") .. ": " .. (res.stderr or "")
+            end
+          end))
+        end
+        run(1)
+      end
+      -- true once built; a failed git call fails the step by name instead of running out its time
+      _G.template_ready = function()
+        assert(not template_status:find("^failed"), template_status)
+        return template_status == "ready"
+      end
+      local function copy_tree(from, to)
+        vim.fn.mkdir(to, "p")
+        for entry, kind in vim.fs.dir(from) do
+          if kind == "directory" then
+            copy_tree(from .. "/" .. entry, to .. "/" .. entry)
+          else
+            assert(vim.uv.fs_copyfile(from .. "/" .. entry, to .. "/" .. entry))
+          end
+        end
+      end
       _G.make = function(name)
-        local remote, work, clone = root .. "/remotes/" .. name .. ".git", root .. "/work/" .. name, root .. "/repos/" .. name
-        git(nil, { "init", "-q", "-b", "main", work })
-        git(work, { "commit", "-q", "--allow-empty", "-m", "first" })
-        git(nil, { "clone", "-q", "--bare", work, remote })
-        git(nil, { "clone", "-q", url(remote), clone })
-        -- the remote moves on: after the fetch every clone is one behind
-        git(work, { "commit", "-q", "--allow-empty", "-m", "second" })
-        git(work, { "push", "-q", url(remote), "main" })
+        local remote, clone = root .. "/remotes/" .. name .. ".git", root .. "/repos/" .. name
+        copy_tree(tpl_remote, remote)
+        copy_tree(tpl_clone, clone)
+        -- the copy still fetches from the template's remote: its url names the repository's own
+        local config = clone .. "/.git/config"
+        local cf = assert(io.open(config, "rb"))
+        local text = cf:read("*a")
+        cf:close()
+        local cloned_from, own = url(tpl_remote), url(remote)
+        local at, stop = text:find(cloned_from, 1, true)
+        assert(at, "no url of the template's remote in " .. config)
+        write(config, text:sub(1, at - 1) .. own .. text:sub(stop + 1))
         -- every later upload-pack of this remote waits for its gate file (at most a minute, so a
         -- failed sheet leaves no process behind for long)
         local gate, script = root .. "/gates/" .. name, root .. "/gates/" .. name .. ".sh"
@@ -145,8 +193,13 @@ return {
       note = "the helpers; gitsuite set up",
     },
     {
+      lua = "_G.build_template()",
+      note = "the template: a bare remote and a clone one commit behind it",
+    },
+    { wait = "_G.template_ready()", timeout = 20000, note = "the template is built" },
+    {
       lua = '_G.make("alpha")',
-      note = "alpha: a clone one commit behind its local bare remote, the fetch gated",
+      note = "alpha: a copy, a clone one commit behind its local bare remote, the fetch gated",
     },
     { lua = '_G.make("bravo")' },
     { lua = '_G.make("charlie")' },
