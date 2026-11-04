@@ -19,9 +19,10 @@ describe("gitsuite.features.status.gates", function()
 
   local gates
   local original_cwd, repo
+  local F = dofile(dir_of_spec .. "git_fixture.lua")
 
   local function run(...)
-    return vim.system({ ... }, { text = true, cwd = repo }):wait()
+    return vim.system({ ... }, { text = true, cwd = repo, env = F.NO_USER_CONFIG }):wait()
   end
 
   before_each(function()

@@ -47,15 +47,13 @@ describe("gitsuite.features.status.relink", function()
 
   describe("against a real throwaway git repo (filetree.nvim faked)", function()
     local original_cwd, repo, captured
+    local F = dofile(dir_of_spec .. "git_fixture.lua")
 
     before_each(function()
       original_cwd = vim.fn.getcwd()
       repo = vim.fn.tempname() .. "-gitsuite-relink"
       vim.fn.mkdir(repo, "p")
-      local init = vim.system({ "git", "-C", repo, "init", "-q" }):wait()
-      assert.equals(0, init.code, "fixture: git init failed: " .. tostring(init.stderr))
-      vim.system({ "git", "-C", repo, "config", "user.email", "test@example.com" }):wait()
-      vim.system({ "git", "-C", repo, "config", "user.name", "Test" }):wait()
+      F.git(repo, "init", "-q")
 
       captured = { scan = nil, handle_result = nil }
       package.loaded["filetree.refs"] = {
@@ -87,12 +85,9 @@ describe("gitsuite.features.status.relink", function()
 
     it("a renamed file: scans the old path and hands scan/handle_result the right moves", function()
       vim.fn.writefile({ "# Hello" }, repo .. "/old.md")
-      vim.system({ "git", "-C", repo, "add", "old.md" }):wait()
-      local commit = vim.system({ "git", "-C", repo, "commit", "-q", "-m", "init" }):wait()
-      assert.equals(0, commit.code, "fixture: git commit failed: " .. tostring(commit.stderr))
-
-      local mv = vim.system({ "git", "-C", repo, "mv", "old.md", "new.md" }):wait()
-      assert.equals(0, mv.code, "fixture: git mv failed: " .. tostring(mv.stderr))
+      F.git(repo, "add", "old.md")
+      F.git(repo, "commit", "-q", "-m", "init")
+      F.git(repo, "mv", "old.md", "new.md")
 
       relink.relink()
 
