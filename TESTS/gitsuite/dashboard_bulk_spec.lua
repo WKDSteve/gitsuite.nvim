@@ -188,6 +188,7 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
     end
 
     package.loaded["gitsuite.features.dashboard.repo_state"] = nil
+    package.loaded["gitsuite.features.dashboard.bulk"] = nil
     package.loaded["gitsuite.features.dashboard.view"] = nil
     state = require("gitsuite.features.dashboard.repo_state")
     view = require("gitsuite.features.dashboard.view")
@@ -903,6 +904,7 @@ describe("gitsuite.features.dashboard.view: live popup", function()
 
   before_each(function()
     package.loaded["gitsuite.features.dashboard.view"] = nil
+    package.loaded["gitsuite.features.dashboard.bulk"] = nil
     package.loaded["gitsuite.features.dashboard.repo_state"] = nil
     view = require("gitsuite.features.dashboard.view")
     require("gitsuite.features.dashboard.repo_state").reset()
@@ -1089,6 +1091,7 @@ describe("gitsuite.features.dashboard.view: context menu", function()
     end
 
     package.loaded["gitsuite.features.dashboard.view"] = nil
+    package.loaded["gitsuite.features.dashboard.bulk"] = nil
     package.loaded["gitsuite.features.dashboard.repo_state"] = nil
     state = require("gitsuite.features.dashboard.repo_state")
     state.reset()

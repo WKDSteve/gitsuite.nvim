@@ -82,6 +82,7 @@ local repo_actions = require("gitsuite.features.dashboard.actions")
 local repos = require("gitsuite.features.dashboard.repos")
 local dashboard_one = require("gitsuite.features.dashboard.status").dashboard_one
 local repo_state = require("gitsuite.features.dashboard.repo_state")
+local bulk = require("gitsuite.features.dashboard.bulk")
 local bulk_report = require("gitsuite.features.dashboard.bulk_report")
 local progress = require("gitsuite.util.progress")
 local notify = require("gitsuite.util.notify").notify
@@ -104,12 +105,6 @@ local _pending = {}
 ---and mean a different repository afterwards.
 ---@type table<string, boolean>
 local _marks = {}
-
----The verb of the batch currently running ("push", "pull", ...), or nil.
----Guards the operations that would move rows out from under an in-flight
----batch, which walks its rows by index.
----@type string|nil
-local _bulk_running
 
 ---The most recent dashboard, kept so the popup can be restored after it is torn
 ---down to open a README. Without this the records only lived in the popup's
@@ -166,8 +161,6 @@ local SPINNER = "⟳"
 ---STATE-cell prefixes of a row the running batch has queued / failed on.
 local QUEUED = "·"
 local FAILED = "✗"
----How often a batch retries a repository whose lock somebody else holds.
-local LOCK_RETRY_MS = 100
 
 ---Mark column, rendered as the first two cells of every row. Present (as two
 ---spaces) on unmarked rows too, so marking a repository never reflows the
@@ -1102,25 +1095,25 @@ end
 ---...) during a batch is refused at once instead of after a pointless yes.
 ---@return boolean refused
 local function _refuse_while_bulk()
-  if not _bulk_running then return false end
-  notify(("A bulk %s is already running"):format(_bulk_running), 3)
+  local verb = repo_state.bulk_verb()
+  if not verb then return false end
+  notify(("A bulk %s is already running"):format(verb), 3)
   return true
 end
 
 ---@private
 ---@internal
----Runs `action_fn` against every record named by `indices`, one after another,
----then reports a single summary: per repository what changed, what failed and
----why, what was skipped, and a count of the rest
----(`gitsuite.features.dashboard.bulk_report`).
+---Runs `action_fn` against every record named by `indices`, then reports a single
+---summary: per repository what changed, what failed and why, what was skipped, and
+---a count of the rest (`gitsuite.features.dashboard.bulk_report`). The walk itself
+---is `gitsuite.features.dashboard.bulk`; this is what it needs from the dashboard.
 ---
 ---One after another for push and pull: `git push` over forty clones at once is a rate
 ---limit, forty credential prompts, or both, and the queue is the same shape
----`repo_updater` already uses for a directory-wide update. Cancelling through
----the progress handle stops the queue from starting further repositories
----rather than killing the one in flight -- interrupting a `pull` mid-write is
----the one outcome worth avoiding. A `fetch` batch is the exception: it only
----reads the remote, so `dashboard.fetch_jobs` of them run at once.
+---`repo_updater` already uses for a directory-wide update. Only `fetch` and `sync` run
+---several at once: a fetch reads the remote and nothing else, and a sync is a fetch
+---first (a pull or push follows only for the repositories that are behind or ahead,
+---and `dashboard.fetch_jobs` bounds those too).
 ---@param bufnr integer
 ---@param records RepoDashboardRecord[]
 ---@param verb string Human-readable action name, used in notifications
@@ -1133,139 +1126,42 @@ local function _run_bulk(bufnr, records, verb, action_fn, indices)
 
   -- Checked again here: a batch may have started while the question was open.
   if _refuse_while_bulk() then return end
-  ---@type string[]
-  local paths = {}
+  ---@type GitSuiteBulkTarget[]
+  local targets = {}
   for _, idx in ipairs(indices) do
-    local busy = _pending[records[idx].path] or repo_state.holder(records[idx].path)
+    local record = records[idx]
+    local busy = _pending[record.path] or repo_state.holder(record.path)
     if busy then
-      notify(("%s: %s already running"):format(records[idx].name, busy), 3)
+      notify(("%s: %s already running"):format(record.name, busy), 3)
       return
     end
-    paths[#paths + 1] = records[idx].path
+    targets[#targets + 1] = { path = record.path, name = record.name }
   end
 
-  -- Every target is queued up front, so the whole batch is visible as a column
-  -- of "queued" cells instead of one row lighting up at a time with no clue
-  -- what else is behind it. Per-repository phases (not `_pending`) carry this,
-  -- so a row the batch is through with can take its own action meanwhile.
-  _bulk_running = verb
-  -- The generation keeps this batch's callbacks out of a newer batch's phases:
-  -- should one start before this one is through (a page reload resets
-  -- `_bulk_running`), this one's late callbacks still release their locks but
-  -- neither move the newer batch's rows nor end it.
-  local generation = repo_state.begin_bulk(verb, paths)
-  _redraw(bufnr, records)
-
-  local handle = progress.create(("%s %d repositories"):format(verb, total), total)
-  local cancelled = false
-  if handle then handle:on_cancel(function()
-    cancelled = true
-  end) end
-
-  -- Filled per position in `indices`, so the summary lists repositories in
-  -- row order whichever of the parallel ones finished first.
-  ---@type table<integer, GitSuiteBulkResult>
-  local results = {}
-  local succeeded, completed = 0, 0
-  -- Only `fetch` and `sync` run several at once: a fetch reads the remote and
-  -- nothing else, and a sync is a fetch first (a pull or push follows only for
-  -- the repositories that are behind or ahead, and `dashboard.fetch_jobs` bounds
-  -- those too), while a push or pull over many clones at once is the rate limit /
-  -- prompt storm described above.
-  local limit = (verb == "fetch" or verb == "sync")
-      and require("gitsuite.config").get().dashboard.fetch_jobs
-    or 1
-  local next_pos, running, finished = 1, 0, false
-
-  local function finish()
-    -- Clears the queue's own phases as well as the cancelled tail's. Row
-    -- actions started meanwhile keep their `_pending` spinner and lock. A
-    -- superseded batch ends nothing: the running flag is the newer one's.
-    if repo_state.end_bulk(generation) then _bulk_running = nil end
-    _redraw(bufnr, records)
-
-    if handle then handle:finish(("%s: %d of %d repositories"):format(verb, succeeded, total)) end
-    ---@type GitSuiteBulkResult[]
-    local ordered = {}
-    for pos = 1, total do
-      if results[pos] then ordered[#ordered + 1] = results[pos] end
-    end
-    local message, any_failed = bulk_report.format(verb, ordered, total)
-    if any_failed then
-      notify(message, vim.log.levels.WARN)
-    else
-      notify_success(message)
-    end
-  end
-
-  local pump
-
-  local function launch(record, pos)
-    repo_state.set_phase(record.path, "fetching", generation)
-    _redraw(bufnr, records)
-    if handle then handle:update({ text = record.name, current = completed, total = total }) end
-
-    local function on_done(ok, err, detail, skipped)
-      vim.schedule(function()
-        repo_state.unlock(record.path)
-        if ok then succeeded = succeeded + 1 end
-        results[pos] = {
-          name = record.name,
-          ok = ok and true or false,
-          err = (not ok) and (err or "unknown error") or nil,
-          detail = ok and detail or nil,
-          skipped = ok and skipped or nil,
-        }
-
-        -- The row is re-read *before* its slot is given up, not alongside it:
-        -- fired off in parallel, the last repository's re-read would still be
-        -- in flight when `finish()` draws the table and announces the batch as
-        -- done, leaving that one row showing the state it had before its own
-        -- push. The phase settles only after that re-read, so a row action
-        -- started on it never races the batch's own stale refresh.
-        dashboard_one(record.path, function(new_record)
-          vim.schedule(function()
-            _store_record(records, new_record)
-            repo_state.set_phase(record.path, ok and "done" or "failed", generation)
-            _redraw(bufnr, records)
-            running = running - 1
-            completed = completed + 1
-            pump()
-          end)
-        end)
-      end)
-    end
-
-    local started, start_err = pcall(action_fn, record.path, on_done)
-    if not started then on_done(false, tostring(start_err)) end
-  end
-
-  -- Fills the free slots in row order; also the way the batch ends, once the
-  -- last slot is given back.
-  pump = function()
-    if finished then return end
-    while running < limit and not cancelled and next_pos <= total do
-      local idx = indices[next_pos]
-      local record = records[idx]
-      -- Row actions only start on settled rows and this one is still queued, so
-      -- the lock is normally free; should anything else hold it, the queue waits
-      -- for it rather than starting a second `git` on the same repository.
-      if not repo_state.try_lock(record.path, verb) then
-        vim.defer_fn(pump, LOCK_RETRY_MS)
-        return
+  bulk.run({
+    verb = verb,
+    targets = targets,
+    action = action_fn,
+    limit = (verb == "fetch" or verb == "sync")
+        and require("gitsuite.config").get().dashboard.fetch_jobs
+      or 1,
+    reread = dashboard_one,
+    on_reread = function(new_record)
+      _store_record(records, new_record)
+    end,
+    redraw = function()
+      _redraw(bufnr, records)
+    end,
+    handle = progress.create(("%s %d repositories"):format(verb, total), total),
+    on_finish = function(results)
+      local message, any_failed = bulk_report.format(verb, results, total)
+      if any_failed then
+        notify(message, vim.log.levels.WARN)
+      else
+        notify_success(message)
       end
-      local pos = next_pos
-      next_pos = next_pos + 1
-      running = running + 1
-      launch(record, pos)
-    end
-    if running == 0 and (cancelled or next_pos > total) then
-      finished = true
-      finish()
-    end
-  end
-
-  pump()
+    end,
+  })
 end
 
 ---@private
@@ -1609,8 +1505,8 @@ local function _switch_page(ctx, delta)
     notify("Only one dashboard page is open -- add entries to dashboard.groups for more", 3)
     return
   end
-  if _bulk_running then
-    notify(("Cannot switch pages while a bulk %s is running"):format(_bulk_running), 3)
+  if repo_state.bulk_verb() then
+    notify(("Cannot switch pages while a bulk %s is running"):format(repo_state.bulk_verb()), 3)
     return
   end
   -- A page reload starts from a clean slate (`_pending` is reset below);
@@ -1644,7 +1540,6 @@ local function _switch_page(ctx, delta)
       _pending = {}
       _marks = {}
       _sort_index = 1
-      _bulk_running = nil
       repo_state.end_bulk()
       _discovery_order = _discovery_ranks(records)
       for i = #ctx.records, 1, -1 do
@@ -1848,8 +1743,8 @@ local ROW_KEYMAPS = {
       -- A batch walks its rows by index, so reordering mid-batch would move
       -- rows out from under it. Row actions (`_pending`, by path) look their
       -- row up again by path once they settle and do not block a re-sort.
-      if _bulk_running then
-        notify(("Cannot re-sort while a bulk %s is running"):format(_bulk_running), 3)
+      if repo_state.bulk_verb() then
+        notify(("Cannot re-sort while a bulk %s is running"):format(repo_state.bulk_verb()), 3)
         return
       end
 
