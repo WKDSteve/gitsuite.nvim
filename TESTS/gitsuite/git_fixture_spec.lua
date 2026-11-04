@@ -19,6 +19,18 @@ describe("git_fixture", function()
     vim.fn.delete(root, "rf")
   end)
 
+  it("a git started by any spec reads neither the user's nor the machine's config", function()
+    -- The variables themselves: CI has no such config, so what git lists would pass there anyway.
+    local null = vim.fn.has("win32") == 1 and "NUL" or "/dev/null"
+    assert.equals(null, vim.env.GIT_CONFIG_GLOBAL)
+    assert.equals(null, vim.env.GIT_CONFIG_SYSTEM)
+    -- A plain call, without F.git and without an env of its own.
+    local res = vim.system({ "git", "config", "--list", "--show-scope" }, { text = true }):wait()
+    assert.equals(0, res.code, res.stderr)
+    assert.is_nil(res.stdout:find("global\t", 1, true), res.stdout)
+    assert.is_nil(res.stdout:find("system\t", 1, true), res.stdout)
+  end)
+
   for _, name in ipairs({ "plain", "with#hash", "with;semicolon", "with space", "with$HOME" }) do
     it(("point_remote: a path %q reads back whole"):format(name), function()
       local url = root .. "/" .. name .. "/remote.git"

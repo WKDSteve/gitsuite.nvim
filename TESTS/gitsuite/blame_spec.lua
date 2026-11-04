@@ -118,7 +118,6 @@ describe("gitsuite.features.blame.for_location", function()
   local blame
   local repo
   local original_notify = vim.notify
-  local F = dofile(dir_of_spec .. "git_fixture.lua")
 
   ---@param args string[]
   ---@param author string
@@ -126,7 +125,7 @@ describe("gitsuite.features.blame.for_location", function()
     local argv =
       { "git", "-c", "user.name=" .. author, "-c", "user.email=" .. author .. "@example.test" }
     vim.list_extend(argv, args)
-    local res = vim.system(argv, { cwd = repo, env = F.NO_USER_CONFIG }):wait()
+    local res = vim.system(argv, { cwd = repo }):wait()
     assert.equals(0, res.code, table.concat(args, " ") .. ": " .. tostring(res.stderr))
   end
 

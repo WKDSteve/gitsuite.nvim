@@ -12,22 +12,14 @@
 -- append_config(), not by git.
 local M = {}
 
-local NULL = vim.fn.has("win32") == 1 and "NUL" or "/dev/null"
-
--- The user's own git config must not reach a fixture: it would make every commit a signed one (about
--- four times the cost, and it needs the user's key). For a spec that sets its own identity.
-M.NO_USER_CONFIG = {
-  GIT_CONFIG_GLOBAL = NULL,
-  GIT_CONFIG_SYSTEM = NULL,
-}
-
--- The same with an identity, which a commit needs. It beats a repository's own `user.name`.
-M.ENV = vim.tbl_extend("error", M.NO_USER_CONFIG, {
+-- The identity a commit needs; TESTS/minimal_init.lua keeps the user's own config away from every git
+-- of the suite. It beats a repository's own `user.name`.
+M.ENV = {
   GIT_AUTHOR_NAME = "t",
   GIT_AUTHOR_EMAIL = "t@example.invalid",
   GIT_COMMITTER_NAME = "t",
   GIT_COMMITTER_EMAIL = "t@example.invalid",
-})
+}
 
 ---Runs `git -C dir ...`, raises when it fails (also while a `describe` body builds a template, where
 ---no assertion is running yet), returns its trimmed stdout.
