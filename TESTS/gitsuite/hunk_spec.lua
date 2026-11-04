@@ -78,6 +78,17 @@ describe("gitsuite.features.hunk", function()
   it("preview() falls back to diff.nvim's :Diff target=git:HEAD without gitsigns", function()
     local ok = pcall(hunk.preview)
     assert.is_true(ok)
+    -- diff.nvim opens its split once `git show` has answered, after preview() returned. Waited for
+    -- here and not left to after_each: an answer landing behind after_each's last look at the
+    -- windows is a window nobody closes, which the guard then reports against this case.
+    local opened = vim.wait(20000, function()
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
+        if name:find("[Diff:target] git:HEAD", 1, true) then return true end
+      end
+      return false
+    end, 5)
+    assert.is_true(opened, "no diff of the current file against HEAD opened")
   end)
 
   describe("GitsuiteStatusChanged, with a faked gitsigns.nvim", function()
