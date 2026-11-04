@@ -67,12 +67,13 @@ describe("gitsuite.features.ui.lazygit bridge", function()
 
       local ok = replace.run("README.md")
       assert.is_true(ok)
-      -- vim.fs.normalize on both sides: nvim_buf_get_name can come back with
-      -- OS-native separators (backslashes on Windows) while getcwd() here
-      -- returns forward slashes -- same file, different string.
+      -- fs_realpath on both sides: the same file, different strings. nvim_buf_get_name can come
+      -- back with OS-native separators (backslashes on Windows) while getcwd() here returns
+      -- forward slashes, and with a path resolved that getcwd() leaves as it is (a checkout below
+      -- an AppData the packaged Claude app redirects, as `ci commit`'s snapshots are).
       assert.equals(
-        vim.fs.normalize(vim.fn.getcwd() .. "/README.md"),
-        vim.fs.normalize(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)))
+        vim.uv.fs_realpath(vim.fn.getcwd() .. "/README.md"),
+        vim.uv.fs_realpath(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)))
       )
 
       vim.fn.delete(dir, "rf")
