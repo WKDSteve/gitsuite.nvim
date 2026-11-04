@@ -51,10 +51,6 @@ return {
         "\\gb",
         "\\lg",
       },
-      -- lib.nvim's roots registry exports its roots to child processes on first use
-      -- (lib.nvim.fs.roots: `NVIM_CONFIG_DIR` and the marker that tells a child the export is its own);
-      -- it is process-wide on purpose and never removed.
-      ignore_env = { "LIB_NVIM_ROOTS_EXPORTED", "NVIM_CONFIG_DIR" },
       -- plugin/gitsuite.lua's load lock: set once per process, a second load must find it.
       ignore_vars = { "loaded_gitsuite" },
       -- Highlight groups are listed as info, not warned about: what is left are the syntax groups of the
