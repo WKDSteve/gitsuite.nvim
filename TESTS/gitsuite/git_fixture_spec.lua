@@ -27,9 +27,12 @@ describe("git_fixture", function()
     end)
   end
 
-  it("point_remote: a backslash arrives as a forward slash, not as an escape", function()
-    F.point_remote(clone, "origin", root .. "\\sub\\remote.git")
-    assert.equals(root .. "/sub/remote.git", F.git(clone, "config", "--get", "remote.origin.url"))
+  it("point_remote: a backslash is never read as an escape", function()
+    local url = root .. "\\sub\\remote.git"
+    F.point_remote(clone, "origin", url)
+    -- A separator on Windows, an ordinary character of a file name everywhere else.
+    local expected = vim.fn.has("win32") == 1 and root .. "/sub/remote.git" or url
+    assert.equals(expected, F.git(clone, "config", "--get", "remote.origin.url"))
   end)
 
   it("point_remote: names the problem when the remote has no url to replace", function()
