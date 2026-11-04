@@ -1,11 +1,20 @@
 -- TESTS/gitsuite/dashboard_bulk_runner_spec.lua -- the walk behind a dashboard batch, without a
 -- buffer: slots, row order, when a row settles, cancel, somebody else's lock, a superseded batch.
 ---@diagnostic disable: undefined-field -- luassert extends `assert` beyond stock Lua's; the test body itself is the guard.
+local dir_of_spec = debug.getinfo(1, "S").source:sub(2):match("(.*[/\\])") or "./"
 describe("gitsuite.features.dashboard.bulk", function()
+  local G = dofile(dir_of_spec .. "spec_guard.lua")()
+  G.install({ { "gitsuite.util.notify", "notify" } })
+
   local bulk, state
   local run -- what the running batch did so far, see `start`
+  local warnings
 
   before_each(function()
+    warnings = {}
+    require("gitsuite.util.notify").notify = function(msg)
+      warnings[#warnings + 1] = msg
+    end
     package.loaded["gitsuite.features.dashboard.repo_state"] = nil
     package.loaded["gitsuite.features.dashboard.bulk"] = nil
     state = require("gitsuite.features.dashboard.repo_state")
@@ -15,7 +24,8 @@ describe("gitsuite.features.dashboard.bulk", function()
   ---Starts a batch over `names` whose action waits for `complete`, and whose re-read answers at
   ---once unless `opts.hold_rereads`.
   ---@param names string[]
-  ---@param opts? { limit?: integer, action?: function, handle?: table, hold_rereads?: boolean }
+  ---`opts.reread`, `opts.on_reread` and `opts.redraw` replace the harmless default ones.
+  ---@param opts? { limit?: integer, action?: function, handle?: table, hold_rereads?: boolean, reread?: function, on_reread?: function, redraw?: function }
   local function start(names, opts)
     opts = opts or {}
     run = { started = {}, waiting = {}, rereads = {}, stored = {}, redraws = 0 }
@@ -31,17 +41,17 @@ describe("gitsuite.features.dashboard.bulk", function()
         run.started[#run.started + 1] = path
         run.waiting[path] = on_done
       end,
-      reread = function(path, on_record)
+      reread = opts.reread or function(path, on_record)
         if opts.hold_rereads then
           run.rereads[path] = on_record
         else
           on_record({ path = path })
         end
       end,
-      on_reread = function(record)
-        run.stored[#run.stored + 1] = record.path
+      on_reread = opts.on_reread or function(record)
+        run.stored[#run.stored + 1] = record and record.path or "nil"
       end,
-      redraw = function()
+      redraw = opts.redraw or function()
         run.redraws = run.redraws + 1
       end,
       handle = opts.handle,
@@ -224,5 +234,83 @@ describe("gitsuite.features.dashboard.bulk", function()
       return run.results ~= nil
     end)
     assert.equals(4, run.redraws, "then settled, then the batch's end")
+  end)
+
+  describe("a callback that raises does not strand the batch", function()
+    ---Completes `a` and `b` in turn and asserts the batch ended, with the locks gone.
+    local function walk_to_the_end()
+      complete("/a")
+      until_(function()
+        return run.waiting["/b"] ~= nil
+      end, "b never started")
+      complete("/b")
+      until_(function()
+        return run.results ~= nil
+      end, "the batch never ended")
+      assert.same({ "a", "b" }, names_of(run.results))
+      assert.is_true(run.results[1].ok)
+      assert.is_nil(state.bulk_verb(), "later batches are not refused")
+      assert.is_nil(state.holder("/a"))
+      assert.is_nil(state.holder("/b"))
+    end
+
+    it("the redraw, reported once", function()
+      start({ "a", "b" }, {
+        redraw = function()
+          error("window gone")
+        end,
+      })
+      walk_to_the_end()
+      assert.equals(1, #warnings, table.concat(warnings, "\n"))
+      assert.truthy(warnings[1]:find("window gone", 1, true), warnings[1])
+    end)
+
+    it("the re-read: the row settles on its old record", function()
+      start({ "a", "b" }, {
+        reread = function()
+          error("no status")
+        end,
+      })
+      walk_to_the_end()
+      assert.same({ "nil", "nil" }, run.stored)
+      assert.truthy(warnings[1]:find("no status", 1, true), warnings[1])
+    end)
+
+    it("a re-read that answered and then raised settles the row only once", function()
+      start({ "a", "b", "c" }, {
+        reread = function(path, on_record)
+          on_record({ path = path })
+          error("after the answer")
+        end,
+      })
+      complete("/a")
+      until_(function()
+        return run.waiting["/b"] ~= nil
+      end, "b never started")
+      vim.wait(30, function()
+        return false
+      end)
+      assert.same({ "/a", "/b" }, run.started, "a second settle would have freed a second slot")
+      assert.same({ "/a" }, run.stored)
+    end)
+
+    it("storing the re-read row", function()
+      start({ "a", "b" }, {
+        on_reread = function()
+          error("store failed")
+        end,
+      })
+      walk_to_the_end()
+      assert.truthy(warnings[1]:find("store failed", 1, true), warnings[1])
+    end)
+
+    it("every method of the progress handle", function()
+      local function boom()
+        error("no progress")
+      end
+      start({ "a", "b" }, { handle = { on_cancel = boom, update = boom, finish = boom } })
+      walk_to_the_end()
+      assert.equals(1, #warnings, table.concat(warnings, "\n"))
+    end)
   end)
 end)

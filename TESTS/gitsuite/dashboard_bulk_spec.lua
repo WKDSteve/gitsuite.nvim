@@ -301,6 +301,130 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
     end, "bulk finished")
   end)
 
+  ---A dashboard over `rows` with a second page, whose scan waits for the returned `land`.
+  local function show_with_pages(rows)
+    local scan = {}
+    view.show(rows, {
+      output = "buffer",
+      pages = { { name = "one" }, { name = "two" } },
+      page_index = 1,
+      on_switch_page = function(_, on_done)
+        scan.land = on_done
+      end,
+    })
+    return scan
+  end
+
+  it("a running batch refuses a re-sort, a page switch and a rescan", function()
+    actions.fetch = fake("fetch")
+    local scan = show_with_pages({ record("r2"), record("r1") })
+    press("gf")
+
+    press("s")
+    assert.truthy(last_message():find("Cannot re-sort while a bulk fetch", 1, true), last_message())
+    assert.truthy(row_text("r2") ~= "" and vim.fn.getbufline(bufnr(), 2)[1]:find("r2", 1, true))
+
+    press("<Right>")
+    assert.truthy(last_message():find("Cannot switch pages while a bulk fetch", 1, true))
+    press("R")
+    assert.truthy(last_message():find("Cannot switch pages while a bulk fetch", 1, true))
+    assert.is_nil(scan.land, "no scan started")
+
+    release("fetch /fake/r2", true)
+    wait_for(function()
+      return waiting["fetch /fake/r1"] ~= nil
+    end, "r1 to start")
+    release("fetch /fake/r1", true)
+    wait_for(function()
+      return state.bulk_verb() == nil
+    end, "bulk finished")
+
+    press("<Right>")
+    assert.is_function(scan.land, "the guard is the batch's: over, and the page switches")
+  end)
+
+  it(
+    "no batch starts while a page is loading, and none after a question asked meanwhile",
+    function()
+      actions.fetch = fake("fetch")
+      local answers = {}
+      require("ui.kit").confirm = function(o)
+        answers[#answers + 1] = o.on_answer
+      end
+      local scan = show_with_pages({ record("r1") })
+
+      press("<Right>")
+      press("gf")
+      assert.truthy(last_message():find("while a page is loading", 1, true), last_message())
+      assert.equals(0, #answers, "refused before the question")
+      assert.is_nil(state.bulk_verb())
+
+      scan.land({ record("r9") }, {})
+      wait_for(function()
+        return row_text("r9") ~= ""
+      end, "page two")
+      press("gf")
+      press("R")
+      answers[1](true)
+      assert.truthy(last_message():find("while a page is loading", 1, true), last_message())
+      assert.same({}, calls, "a yes answered during a load starts nothing")
+      assert.is_nil(state.bulk_verb())
+    end
+  )
+
+  it("the yes runs on the repositories asked about, whatever a scan put there since", function()
+    actions.fetch = fake("fetch")
+    local answer
+    require("ui.kit").confirm = function(o)
+      answer = o.on_answer
+    end
+    local scan = show_with_pages({ record("r1"), record("r2") })
+
+    press("gf")
+    press("R")
+    scan.land({ record("other"), record("another") }, {})
+    wait_for(function()
+      return row_text("other") ~= ""
+    end, "the rescan to land")
+    answer(true)
+
+    assert.same({ "fetch /fake/r1" }, calls)
+    release("fetch /fake/r1", true)
+    wait_for(function()
+      return waiting["fetch /fake/r2"] ~= nil
+    end, "r2 to start")
+    release("fetch /fake/r2", true)
+    wait_for(function()
+      return state.bulk_verb() == nil
+    end, "bulk finished")
+    assert.same({ "fetch /fake/r1", "fetch /fake/r2" }, calls)
+  end)
+
+  it("gP's yes runs on the repositories asked about too", function()
+    actions.pull = fake("pull")
+    local answer, choices
+    require("ui.kit").confirm = function(o)
+      answer, choices = o.on_answer, o.choices
+    end
+    local behind = record("r1")
+    behind.behind = 1
+    local scan = show_with_pages({ behind, record("r2") })
+
+    press("gP")
+    press("R")
+    scan.land({ record("other"), record("another") }, {})
+    wait_for(function()
+      return row_text("other") ~= ""
+    end, "the rescan to land")
+    answer(choices[1])
+
+    assert.same({ "pull /fake/r1" }, calls)
+    release("pull /fake/r1", true)
+    wait_for(function()
+      return state.bulk_verb() == nil
+    end, "bulk finished")
+  end)
+
   it("gf runs dashboard.fetch_jobs fetches at once, in row order, and settles every row", function()
     require("gitsuite.config").setup({ dashboard = { fetch_jobs = 2 } })
     actions.fetch = fake("fetch")

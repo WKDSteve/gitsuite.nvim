@@ -121,6 +121,15 @@ local _last_view
 ---@type { bufnr: integer, records: RepoDashboardRecord[] }|nil
 local _view
 
+---Guards against `_switch_page` firing twice before its own async scan
+---resolves (e.g. a double-tap on the page-next key): `_last_view.opts.
+---page_index` only advances once that scan's callback runs, so two
+---quick presses would otherwise both compute the same target page and
+---dispatch two overlapping, redundant scans of it, whichever resolves last
+---silently winning. A batch does not start meanwhile either (`_refuse_while_bulk`).
+---@type boolean
+local _page_switching = false
+
 ---Every row re-read after an action (see `_store_record`), by path, stamped
 ---with `_reread_seq` at the time it was stored. A scan running alongside a
 ---batch (`:Git dashboard` again mid-run) may read a repository before the
@@ -1096,14 +1105,38 @@ end
 ---@return boolean refused
 local function _refuse_while_bulk()
   local verb = repo_state.bulk_verb()
-  if not verb then return false end
-  notify(("A bulk %s is already running"):format(verb), 3)
-  return true
+  if verb then
+    notify(("A bulk %s is already running"):format(verb), 3)
+    return true
+  end
+  -- The page landing would end this batch's phases and refill the rows under it.
+  if _page_switching then
+    notify("Cannot start a batch while a page is loading -- wait for it to finish", 3)
+    return true
+  end
+  return false
 end
 
 ---@private
 ---@internal
----Runs `action_fn` against every record named by `indices`, then reports a single
+---The repositories `indices` name right now. Taken before a batch's question is
+---asked: a scan landing while it is open refills the rows in place, and the yes
+---answers for the repositories the question was about, not for what sits at
+---those indices by then.
+---@param records RepoDashboardRecord[]
+---@param indices integer[] Record indices, in row order
+---@return GitSuiteBulkTarget[]
+local function _targets_at(records, indices)
+  local targets = {}
+  for i, idx in ipairs(indices) do
+    targets[i] = { path = records[idx].path, name = records[idx].name }
+  end
+  return targets
+end
+
+---@private
+---@internal
+---Runs `action_fn` against every one of `targets`, then reports a single
 ---summary: per repository what changed, what failed and why, what was skipped, and
 ---a count of the rest (`gitsuite.features.dashboard.bulk_report`). The walk itself
 ---is `gitsuite.features.dashboard.bulk`; this is what it needs from the dashboard.
@@ -1118,24 +1151,20 @@ end
 ---@param records RepoDashboardRecord[]
 ---@param verb string Human-readable action name, used in notifications
 ---@param action_fn fun(repo: string, on_done: GitSuiteDashboardActionDone): nil
----@param indices integer[] Record indices to act on, in row order
+---@param targets GitSuiteBulkTarget[] From `_targets_at`, in row order
 ---@return nil
-local function _run_bulk(bufnr, records, verb, action_fn, indices)
-  local total = #indices
+local function _run_bulk(bufnr, records, verb, action_fn, targets)
+  local total = #targets
   if total == 0 then return end
 
   -- Checked again here: a batch may have started while the question was open.
   if _refuse_while_bulk() then return end
-  ---@type GitSuiteBulkTarget[]
-  local targets = {}
-  for _, idx in ipairs(indices) do
-    local record = records[idx]
-    local busy = _pending[record.path] or repo_state.holder(record.path)
+  for _, target in ipairs(targets) do
+    local busy = _pending[target.path] or repo_state.holder(target.path)
     if busy then
-      notify(("%s: %s already running"):format(record.name, busy), 3)
+      notify(("%s: %s already running"):format(target.name, busy), 3)
       return
     end
-    targets[#targets + 1] = { path = record.path, name = record.name }
   end
 
   bulk.run({
@@ -1186,10 +1215,11 @@ local function _confirm_bulk(bufnr, records, verb, action_fn, indices, what)
   end
   if _refuse_while_bulk() then return end
 
+  local targets = _targets_at(records, indices)
   kit.confirm({
-    question = ("%s%s %d %s?"):format(verb:sub(1, 1):upper(), verb:sub(2), #indices, what),
+    question = ("%s%s %d %s?"):format(verb:sub(1, 1):upper(), verb:sub(2), #targets, what),
     on_answer = function(yes)
-      if yes then _run_bulk(bufnr, records, verb, action_fn, indices) end
+      if yes then _run_bulk(bufnr, records, verb, action_fn, targets) end
     end,
   })
 end
@@ -1255,18 +1285,22 @@ local function _pull_all(ctx)
   if _refuse_while_bulk() then return end
   local scope = require("gitsuite.config").get().dashboard.pull_scope
   local plan = require("gitsuite.features.dashboard.pull_scope").plan(ctx.records, scope)
+  local targets_by_choice = {}
+  for choice, indices in pairs(plan.targets) do
+    targets_by_choice[choice] = _targets_at(ctx.records, indices)
+  end
   kit.confirm({
     question = plan.question,
     choices = plan.choices,
     default = 1,
     on_answer = function(choice)
-      local indices = choice and plan.targets[choice]
-      if not indices then return end
-      if #indices == 0 then
+      local targets = choice and targets_by_choice[choice]
+      if not targets then return end
+      if #targets == 0 then
         notify("No repositories behind their upstream - fetch first (gf) or pull all", 3)
         return
       end
-      _run_bulk(ctx.bufnr, ctx.records, "pull", repo_actions.pull, indices)
+      _run_bulk(ctx.bufnr, ctx.records, "pull", repo_actions.pull, targets)
     end,
   })
 end
@@ -1470,17 +1504,6 @@ local function _current_page()
   if not pages then return nil end
   return pages[view_state.opts.page_index or 1]
 end
-
----@private
----@internal
----Guards against `_switch_page` firing twice before its own async scan
----resolves (e.g. a double-tap on the page-next key): `_last_view.opts.
----page_index` only advances once that scan's callback runs, so two
----quick presses would otherwise both compute the same target page and
----dispatch two overlapping, redundant scans of it, whichever resolves last
----silently winning.
----@type boolean
-local _page_switching = false
 
 ---@private
 ---@internal
@@ -1740,9 +1763,9 @@ local ROW_KEYMAPS = {
     label = "s Sort",
     desc = "Cycle sort order (discovery / name / state / age)",
     run = function(ctx)
-      -- A batch walks its rows by index, so reordering mid-batch would move
-      -- rows out from under it. Row actions (`_pending`, by path) look their
-      -- row up again by path once they settle and do not block a re-sort.
+      -- A batch works down the rows in the order it started with, so a re-sort
+      -- mid-batch would leave it jumping around the table. Row actions (`_pending`,
+      -- by path) look their row up again once they settle and do not block a re-sort.
       if repo_state.bulk_verb() then
         notify(("Cannot re-sort while a bulk %s is running"):format(repo_state.bulk_verb()), 3)
         return

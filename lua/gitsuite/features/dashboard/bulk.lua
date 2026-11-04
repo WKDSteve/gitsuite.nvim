@@ -7,6 +7,7 @@
 --- the table reads. So the queue's rules can be tested by themselves.
 
 local repo_state = require("gitsuite.features.dashboard.repo_state")
+local notify = require("gitsuite.util.notify").notify
 
 ---@class GitSuiteBulkTarget
 ---@field path string Absolute repository path
@@ -35,6 +36,10 @@ local LOCK_RETRY_MS = 100
 ---Cancelling through the progress handle stops the queue from starting further
 ---repositories rather than killing the ones in flight: interrupting a `pull`
 ---mid-write is the one outcome worth avoiding.
+---
+---A callback that raises (a redraw, a re-read, the progress handle) is reported
+---once and the walk goes on: a batch that never ends refuses every later batch,
+---page switch and re-sort until Neovim restarts, which is worse than a stale row.
 ---@param opts GitSuiteBulkOpts
 ---@return nil
 function M.run(opts)
@@ -47,6 +52,23 @@ function M.run(opts)
     paths[i] = target.path
   end
 
+  local warned = false
+  local function warn_once(err)
+    if warned then return end
+    warned = true
+    notify(("bulk %s: %s"):format(verb, tostring(err)), vim.log.levels.WARN)
+  end
+
+  ---Runs a callback of the caller's; what it raises stays out of the walk.
+  local function guarded(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then warn_once(err) end
+  end
+
+  local function redraw()
+    guarded(opts.redraw)
+  end
+
   -- Every target is queued up front, so the whole batch is visible as a column
   -- of "queued" cells instead of one row lighting up at a time with no clue
   -- what else is behind it. Per-repository phases carry this, so a row the
@@ -57,10 +79,10 @@ function M.run(opts)
   -- bulk), this one's late callbacks still release their locks but neither move
   -- the newer batch's rows nor end it.
   local generation = repo_state.begin_bulk(verb, paths)
-  opts.redraw()
+  redraw()
 
   local cancelled = false
-  if handle then handle:on_cancel(function()
+  if handle then guarded(handle.on_cancel, handle, function()
     cancelled = true
   end) end
 
@@ -76,9 +98,11 @@ function M.run(opts)
     -- started meanwhile keep their own spinner and lock. A superseded batch ends
     -- nothing: the running bulk is the newer one's.
     repo_state.end_bulk(generation)
-    opts.redraw()
+    redraw()
 
-    if handle then handle:finish(("%s: %d of %d repositories"):format(verb, succeeded, total)) end
+    if handle then
+      guarded(handle.finish, handle, ("%s: %d of %d repositories"):format(verb, succeeded, total))
+    end
     ---@type GitSuiteBulkResult[]
     local ordered = {}
     for pos = 1, total do
@@ -91,8 +115,10 @@ function M.run(opts)
 
   local function launch(target, pos)
     repo_state.set_phase(target.path, "fetching", generation)
-    opts.redraw()
-    if handle then handle:update({ text = target.name, current = completed, total = total }) end
+    redraw()
+    if handle then
+      guarded(handle.update, handle, { text = target.name, current = completed, total = total })
+    end
 
     local function on_done(ok, err, detail, skipped)
       vim.schedule(function()
@@ -112,16 +138,25 @@ function M.run(opts)
         -- done, leaving that one row showing the state it had before its own
         -- push. The phase settles only after that re-read, so a row action
         -- started on it never races the batch's own stale refresh.
-        opts.reread(target.path, function(new_record)
+        local settled = false
+        local function settle(new_record)
+          -- Once only: a re-read that answered and then raised lands here twice.
+          if settled then return end
+          settled = true
           vim.schedule(function()
-            opts.on_reread(new_record)
+            guarded(opts.on_reread, new_record)
             repo_state.set_phase(target.path, ok and "done" or "failed", generation)
-            opts.redraw()
+            redraw()
             running = running - 1
             completed = completed + 1
             pump()
           end)
-        end)
+        end
+        local reread_ok, reread_err = pcall(opts.reread, target.path, settle)
+        if not reread_ok then
+          warn_once(reread_err)
+          settle(nil)
+        end
       end)
     end
 

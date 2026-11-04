@@ -25,8 +25,8 @@
 --- `failed` counts as settled because nothing runs there any more, and retrying
 --- is exactly what a user wants to do with a failed row.
 ---
---- Pure Lua state, no `vim.*` calls: the dashboard view drives it from its own
---- callbacks, and the specs drive it directly.
+--- Pure Lua state, no `vim.*` calls: the dashboard view and its bulk runner
+--- (`gitsuite.features.dashboard.bulk`) drive it, and the specs drive it directly.
 
 ---@alias GitSuiteDashboardPhase "pending"|"fetching"|"done"|"failed"
 
