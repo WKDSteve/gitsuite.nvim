@@ -14,16 +14,31 @@ describe("gitsuite.features.plugins report --fetch", function()
     return "file://" .. path
   end
 
-  ---A bare upstream with `n` commits on main, and a work repository pushing to it.
+  local Fixture = dofile(dir_of_spec .. "git_fixture.lua")
+  ---@type table<integer, { work: string, bare: string }> Finished upstreams by their number of commits
+  local upstreams = {}
+
+  ---A bare upstream with `n` commits on main, and a work repository pushing to it: five git processes
+  ---once per `n`, per case a copy. The work repository pushes by URL, so a copy knows no other bare.
   ---@return string bare
   ---@return string work
   local function upstream(n)
-    local work = F.init("-work")
-    F.history(work, n)
-    F.git(work, { "reset", "-q", "--hard", "main" })
+    if not upstreams[n] then
+      local built = Fixture.template_root()
+      local tpl_work, tpl_bare = built .. "/work", built .. "/bare"
+      vim.fn.mkdir(tpl_work, "p")
+      vim.fn.mkdir(tpl_bare, "p")
+      F.git(tpl_work, { "init", "-q", "-b", "main" })
+      F.history(tpl_work, n)
+      F.git(tpl_work, { "reset", "-q", "--hard", "main" })
+      F.git(tpl_bare, { "init", "-q", "--bare", "-b", "main" })
+      F.git(tpl_work, { "push", "-q", url_of(tpl_bare), "main" })
+      upstreams[n] = { work = tpl_work, bare = tpl_bare }
+    end
+    local work = F.tmpdir("-work")
+    Fixture.copy(upstreams[n].work, work)
     local bare = F.tmpdir("-bare")
-    F.git(bare, { "init", "-q", "--bare", "-b", "main" })
-    F.git(work, { "push", "-q", url_of(bare), "main" })
+    Fixture.copy(upstreams[n].bare, bare)
     return bare, work
   end
 

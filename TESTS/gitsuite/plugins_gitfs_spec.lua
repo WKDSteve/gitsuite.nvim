@@ -17,11 +17,21 @@ describe("gitsuite.features.plugins.gitfs", function()
     F.cleanup()
   end)
 
-  ---A repository with two commits, `a` then `b` (built in one process).
+  local Fixture = dofile(dir_of_spec .. "git_fixture.lua")
+  local two_commits_template
+
+  ---A repository with two commits, `a` then `b`: built once, per case a copy. The dates are fixed, so
+  ---the hashes are the same in every copy.
   local function two_commits(suffix)
-    local repo = F.init(suffix)
-    local shas = F.history(repo, 2)
-    return repo, shas[1], shas[2]
+    if not two_commits_template then
+      local built = Fixture.template_root()
+      F.git(built, { "init", "-q", "-b", "main" })
+      local shas = F.history(built, 2)
+      two_commits_template = { dir = built, a = shas[1], b = shas[2] }
+    end
+    local repo = F.tmpdir(suffix)
+    Fixture.copy(two_commits_template.dir, repo)
+    return repo, two_commits_template.a, two_commits_template.b
   end
 
   ---The same through real commands, which (unlike fast-import) write a reflog.

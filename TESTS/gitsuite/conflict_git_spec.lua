@@ -27,11 +27,14 @@ describe("gitsuite.features.conflict against real `git merge` conflicts", functi
     { vim.ui, "select" },
   })
 
+  local Fixture = dofile(dir_of_spec .. "git_fixture.lua")
   local conflict
   local repo
   local original_cwd
   local original_notify
   local notices
+  ---@type table<string, string> Key of a fixture's history -> where a finished copy of it lies
+  local branches = {}
 
   ---@param args string[]
   ---@param autocrlf boolean
@@ -129,18 +132,28 @@ describe("gitsuite.features.conflict against real `git merge` conflicts", functi
   ---@param attributes? string Contents of a `.gitattributes` committed with the base.
   ---@return string path
   local function make_conflict(fixture, style, eol, autocrlf, attributes)
-    git({ "init", "-q", "-b", "main" }, autocrlf)
     local path = repo .. "/" .. FILE
-    write_bytes(path, join(version(fixture, "base"), eol))
-    if attributes then write_bytes(repo .. "/.gitattributes", attributes) end
-    git({ "add", "." }, autocrlf)
-    git({ "commit", "-q", "-m", "base" }, autocrlf)
-    git({ "checkout", "-q", "-b", "other" }, autocrlf)
-    write_bytes(path, join(version(fixture, "theirs"), eol))
-    git({ "commit", "-q", "-am", "theirs" }, autocrlf)
-    git({ "checkout", "-q", "main" }, autocrlf)
-    write_bytes(path, join(version(fixture, "ours"), eol))
-    git({ "commit", "-q", "-am", "ours" }, autocrlf)
+    -- The history before the merge differs by fixture and line ending, not by style: it is built once
+    -- (seven git processes, seconds each on a loaded machine) and copied. The merge stays a real one.
+    local key = vim.inspect({ fixture, eol, autocrlf, attributes })
+    if not branches[key] then
+      git({ "init", "-q", "-b", "main" }, autocrlf)
+      write_bytes(path, join(version(fixture, "base"), eol))
+      if attributes then write_bytes(repo .. "/.gitattributes", attributes) end
+      git({ "add", "." }, autocrlf)
+      git({ "commit", "-q", "-m", "base" }, autocrlf)
+      git({ "checkout", "-q", "-b", "other" }, autocrlf)
+      write_bytes(path, join(version(fixture, "theirs"), eol))
+      git({ "commit", "-q", "-am", "theirs" }, autocrlf)
+      git({ "checkout", "-q", "main" }, autocrlf)
+      write_bytes(path, join(version(fixture, "ours"), eol))
+      git({ "commit", "-q", "-am", "ours" }, autocrlf)
+      local template = Fixture.template_root()
+      Fixture.copy(repo, template)
+      branches[key] = template
+    else
+      Fixture.copy(branches[key], repo)
+    end
     local _, code = git({ "-c", "merge.conflictStyle=" .. style, "merge", "other" }, autocrlf, true)
     assert.is_true(code ~= 0, "fixture: the merge must conflict, otherwise this proves nothing")
     return path
