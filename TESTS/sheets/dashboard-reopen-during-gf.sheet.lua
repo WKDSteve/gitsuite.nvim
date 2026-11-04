@@ -37,7 +37,6 @@ return {
       lua = [=[local root = vim.fs.normalize(vim.fn.tempname())
       vim.fn.mkdir(root .. "/repos", "p")
       vim.fn.mkdir(root .. "/remotes", "p")
-      vim.fn.mkdir(root .. "/work", "p")
       vim.fn.mkdir(root .. "/gates", "p")
       _G.sheet_root = root
       _G.NAMES = { "alpha", "bravo", "charlie", "delta", "echo", "foxtrot" }
@@ -81,17 +80,25 @@ return {
             "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false", "-c", "init.defaultBranch=main" }
           if call[1] then vim.list_extend(argv, { "-C", call[1] }) end
           vim.list_extend(argv, call[2])
-          vim.system(argv, { text = true, env = env }, vim.schedule_wrap(function(res)
-            if res.code == 0 then
-              run(i + 1)
-            else
-              template_status = "failed: git " .. table.concat(call[2], " ") .. ": " .. (res.stderr or "")
-            end
-          end))
+          local function failed(why)
+            template_status = "failed: git " .. table.concat(call[2], " ") .. ": " .. why
+          end
+          -- the process's own timeout is below the wait step's, so a git that hangs is named too
+          local spawned, err = pcall(vim.system, argv, { text = true, env = env, timeout = 15000 },
+            vim.schedule_wrap(function(res)
+              if res.code == 0 then
+                run(i + 1)
+              else
+                failed(("exit %d: %s"):format(res.code, res.stderr or ""))
+              end
+            end))
+          -- from the second call on this runs outside any step, where an error would reach nobody
+          if not spawned then failed(tostring(err)) end
         end
         run(1)
       end
-      -- true once built; a failed git call fails the step by name instead of running out its time
+      -- true once built; a git call that failed, hung or did not start fails the step by name
+      -- instead of running out its time
       _G.template_ready = function()
         assert(not template_status:find("^failed"), template_status)
         return template_status == "ready"
