@@ -2,46 +2,52 @@
 -- whichever direction it is off (gitsuite.features.dashboard.actions.sync).
 --
 -- Real git on throw-away repositories under a temp folder, the remote being a bare repository
--- next to them: no network, nothing outside the temp folder is read or written. Each case builds its
--- own state (behind, ahead, diverged, ...) and checks what happened to both sides.
+-- next to them: no network, nothing outside the temp folder is read or written. Each case starts from
+-- a copy of the same template, builds its own state (behind, ahead, diverged, ...) from there and
+-- checks what happened to both sides.
 ---@diagnostic disable: undefined-field -- luassert extends `assert` beyond stock Lua's.
+local dir_of_spec = debug.getinfo(1, "S").source:sub(2):match("(.*[/\\])") or "./"
 
 describe("gitsuite.features.dashboard.actions.sync (real git, local remote)", function()
   local actions = require("gitsuite.features.dashboard.actions")
+  local F = dofile(dir_of_spec .. "git_fixture.lua")
+  local git = F.git
 
-  -- A commit needs an identity, and a user's own git config must not leak into the test.
-  local ENV = {
-    GIT_AUTHOR_NAME = "t",
-    GIT_AUTHOR_EMAIL = "t@example.invalid",
-    GIT_COMMITTER_NAME = "t",
-    GIT_COMMITTER_EMAIL = "t@example.invalid",
-    GIT_CONFIG_GLOBAL = vim.fn.has("win32") == 1 and "NUL" or "/dev/null",
-    GIT_CONFIG_SYSTEM = vim.fn.has("win32") == 1 and "NUL" or "/dev/null",
-  }
-
-  local root, remote, a, b
-
-  ---Runs `git -C dir ...`, fails the test when it fails, returns its trimmed stdout.
-  ---@param dir string
-  ---@param ... string
-  ---@return string
-  local function git(dir, ...)
-    local args = { "git", "-C", dir, ... }
-    local res = vim.system(args, { text = true, env = ENV }):wait()
-    assert.equals(0, res.code, table.concat(args, " ") .. ": " .. (res.stderr or ""))
-    return vim.trim(res.stdout or "")
-  end
-
-  ---Commits a new file in `dir` (a distinct file per call, so two sides never conflict).
+  ---One process: an empty commit counts like any other, and two sides can never conflict over it.
   ---@param dir string
   ---@param name string
   local function commit(dir, name)
+    git(dir, "commit", "-q", "--allow-empty", "-m", name)
+  end
+
+  ---Commits a new file, for a case that looks at what arrives in the working tree.
+  ---@param dir string
+  ---@param name string
+  local function commit_file(dir, name)
     local fd = assert(io.open(dir .. "/" .. name, "w"))
     fd:write(name, "\n")
     fd:close()
     git(dir, "add", name)
     git(dir, "commit", "-q", "-m", name)
   end
+
+  -- Built once, per case it is a copy (git_fixture.lua says why): `remote.git` and its level clones
+  -- `a` and `b` (`b` is what a second clone would be: a copy of `a`).
+  local TEMPLATE = F.template_root()
+  do
+    local tpl_a = TEMPLATE .. "/a"
+    git(TEMPLATE, "init", "-q", "--template=", "--bare", "-b", "main", "remote.git")
+    git(TEMPLATE, "clone", "-q", "--template=", "remote.git", "a")
+    commit(tpl_a, "seed")
+    git(tpl_a, "push", "-q", "-u", "origin", "main")
+    F.copy(tpl_a, TEMPLATE .. "/b")
+  end
+
+  local root, remote, a, b
+
+  -- How long a case waits for git's answer: seconds per process on a loaded machine, and a push starts
+  -- several. Stays under the case's budget of 30 s, so a broken case fails on its assertion.
+  local WAIT_MS = 28000
 
   ---Runs `actions.sync` on `dir` and waits for its answer.
   ---@param dir string
@@ -55,7 +61,7 @@ describe("gitsuite.features.dashboard.actions.sync (real git, local remote)", fu
       done, ok, err, detail, skipped = true, o, e, d, s
     end)
     assert.is_true(
-      vim.wait(20000, function()
+      vim.wait(WAIT_MS, function()
         return done
       end, 20),
       "sync did not answer"
@@ -63,17 +69,29 @@ describe("gitsuite.features.dashboard.actions.sync (real git, local remote)", fu
     return ok, err, detail, skipped
   end
 
+  ---Runs `actions.push` on `dir` and waits for its answer.
+  ---@param dir string
+  ---@return boolean|nil ok
+  ---@return string|nil err
+  ---@return string|nil detail
+  local function push(dir)
+    local done, ok, err, detail = false, nil, nil, nil
+    actions.push(dir, function(o, e, d)
+      done, ok, err, detail = true, o, e, d
+    end)
+    assert.is_true(vim.wait(WAIT_MS, function()
+      return done
+    end, 20))
+    return ok, err, detail
+  end
+
   before_each(function()
-    root = vim.fn.tempname()
-    vim.fn.mkdir(root, "p")
+    root = vim.fs.normalize(vim.fn.tempname())
+    F.copy(TEMPLATE, root)
     remote = root .. "/remote.git"
     a, b = root .. "/a", root .. "/b"
-    git(root, "init", "-q", "--bare", "-b", "main", "remote.git")
-    git(root, "clone", "-q", "remote.git", "a")
-    git(a, "checkout", "-q", "-b", "main")
-    commit(a, "seed")
-    git(a, "push", "-q", "-u", "origin", "main")
-    git(root, "clone", "-q", "remote.git", "b")
+    F.point_remote(a, "origin", remote)
+    F.point_remote(b, "origin", remote)
   end)
 
   after_each(function()
@@ -91,7 +109,7 @@ describe("gitsuite.features.dashboard.actions.sync (real git, local remote)", fu
   end)
 
   it("pulls a repository that is behind", function()
-    commit(b, "from-b")
+    commit_file(b, "from-b")
     commit(b, "from-b2")
     git(b, "push", "-q")
     local ok, err, detail = sync(a)
@@ -148,71 +166,73 @@ describe("gitsuite.features.dashboard.actions.sync (real git, local remote)", fu
     assert.equals(ahead, git(a, "rev-parse", "HEAD"))
   end)
 
-  it("push (p/gp) reports how many commits it pushed, and nothing for a level branch", function()
-    ---@param dir string
-    ---@return boolean|nil ok
-    ---@return string|nil err
-    ---@return string|nil detail
-    local function push(dir)
-      local done, ok, err, detail = false, nil, nil, nil
-      actions.push(dir, function(o, e, d)
-        done, ok, err, detail = true, o, e, d
-      end)
-      assert.is_true(vim.wait(20000, function()
-        return done
-      end, 20))
-      return ok, err, detail
-    end
-
+  it("push (p/gp) reports nothing for a level branch", function()
     local ok, err, detail = push(a)
     assert.is_true(ok, err)
     assert.is_nil(detail, "nothing to push is unchanged")
+  end)
+
+  it("push (p/gp) reports how many commits it pushed", function()
     commit(a, "p1")
     commit(a, "p2")
-    ok, err, detail = push(a)
+    local ok, err, detail = push(a)
     assert.is_true(ok, err)
     assert.equals("pushed 2 commits", detail)
     assert.equals(git(a, "rev-parse", "HEAD"), git(remote, "rev-parse", "main"))
   end)
 
-  it("push and sync count against the push destination, not the upstream (triangular)", function()
-    ---@param dir string
-    ---@return boolean|nil ok
-    ---@return string|nil err
-    ---@return string|nil detail
-    local function push(dir)
-      local done, ok, err, detail = false, nil, nil, nil
-      actions.push(dir, function(o, e, d)
-        done, ok, err, detail = true, o, e, d
-      end)
-      assert.is_true(vim.wait(20000, function()
-        return done
-      end, 20))
-      return ok, err, detail
+  describe("triangular: the upstream stays origin/main, pushes go to a fork", function()
+    local tri, fork
+
+    -- The three processes of this template are paid by the first case here, not by the file's start.
+    -- `tpl_tri` is two commits ahead of its upstream, and the fork already has both.
+    local tpl_tri, tpl_fork
+    local function build_template()
+      -- A folder of its own: what lies in TEMPLATE is copied for every case of this file.
+      local tpl_root = F.template_root()
+      tpl_tri, tpl_fork = tpl_root .. "/tri", tpl_root .. "/fork.git"
+      F.copy(TEMPLATE .. "/a", tpl_tri)
+      F.copy(TEMPLATE .. "/remote.git", tpl_fork)
+      F.append_config(
+        tpl_tri,
+        ('[remote "fork"]\n\turl = %s\n'):format(tpl_fork)
+          .. "\tfetch = +refs/heads/*:refs/remotes/fork/*\n"
+          .. "[remote]\n\tpushDefault = fork\n"
+      )
+      commit(tpl_tri, "t1")
+      commit(tpl_tri, "t2")
+      git(tpl_tri, "push", "-q", "fork", "main")
     end
 
-    -- Upstream stays origin/main, pushes go to the fork; the fork already has both new commits.
-    git(root, "init", "-q", "--bare", "-b", "main", "fork.git")
-    git(a, "remote", "add", "fork", root .. "/fork.git")
-    git(a, "config", "remote.pushDefault", "fork")
-    commit(a, "t1")
-    commit(a, "t2")
-    git(a, "push", "-q", "fork", "main")
-    assert.equals("2\t0", git(a, "rev-list", "--left-right", "--count", "HEAD...@{u}"))
+    before_each(function()
+      if not tpl_tri then build_template() end
+      tri, fork = root .. "/tri", root .. "/fork.git"
+      F.copy(tpl_tri, tri)
+      F.copy(tpl_fork, fork)
+      F.point_remote(tri, "origin", remote)
+      F.point_remote(tri, "fork", fork)
+    end)
 
-    local ok, err, detail = push(a)
-    assert.is_true(ok, err)
-    assert.is_nil(detail, "the fork was level: nothing was pushed")
+    it("push counts against the push destination, not the upstream", function()
+      assert.equals("2\t0", git(tri, "rev-list", "--left-right", "--count", "HEAD...@{u}"))
+      local ok, err, detail = push(tri)
+      assert.is_true(ok, err)
+      assert.is_nil(detail, "the fork was level: nothing was pushed")
+    end)
 
-    ok, err, detail = sync(a)
-    assert.is_true(ok, err)
-    assert.is_nil(detail, "sync's push sent nothing either")
+    it("sync counts against the push destination, not the upstream", function()
+      local ok, err, detail = sync(tri)
+      assert.is_true(ok, err)
+      assert.is_nil(detail, "the fork was level: sync's push sent nothing")
+    end)
 
-    commit(a, "t3")
-    ok, err, detail = sync(a)
-    assert.is_true(ok, err)
-    assert.equals("pushed 1 commit", detail, "one commit went to the fork, not three")
-    assert.equals(git(a, "rev-parse", "HEAD"), git(root .. "/fork.git", "rev-parse", "main"))
+    it("sync pushes to the push destination what only it lacks", function()
+      commit(tri, "t3")
+      local ok, err, detail = sync(tri)
+      assert.is_true(ok, err)
+      assert.equals("pushed 1 commit", detail, "one commit went to the fork, not three")
+      assert.equals(git(tri, "rev-parse", "HEAD"), git(fork, "rev-parse", "main"))
+    end)
   end)
 
   it("reads the counts after the fetch, not from the last time", function()

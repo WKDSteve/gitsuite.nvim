@@ -11,23 +11,36 @@ describe("gitsuite.features.dashboard", function()
 
   local repos, status, actions
 
+  local F = dofile(dir_of_spec .. "git_fixture.lua")
+
+  -- How long a case waits for an answer that real git processes give: on a loaded machine each of
+  -- them takes seconds, and a push starts several. Only a broken case ever waits this long; it stays
+  -- under the case's own budget of 30 s, so such a case fails on its assertion and names it.
+  local WAIT_MS = 28000
+
   local function tmpdir(suffix)
-    local dir = vim.fn.tempname() .. suffix
+    local dir = vim.fs.normalize(vim.fn.tempname() .. suffix)
     vim.fn.mkdir(dir, "p")
     return dir
   end
 
-  ---@param dir string
-  ---@param args string[]
-  local function git(dir, args)
-    local argv =
-      { "git", "-c", "user.name=spec", "-c", "user.email=spec@example.invalid", "-C", dir }
-    vim.list_extend(argv, args)
-    local res = vim.system(argv, { text = true }):wait()
-    assert.equals(
-      0,
-      res.code,
-      ("fixture: git %s failed: %s"):format(table.concat(args, " "), res.stderr)
+  -- Built once, per case it is a copy (git_fixture.lua says why): a repository with one commit, an
+  -- empty bare remote, and that repository as a clone of it with its one commit still to push (the
+  -- config of a clone of an empty remote; the url is set per case).
+  local TEMPLATE = F.template_root()
+  local TPL_REPO, TPL_BARE, TPL_CLONE =
+    TEMPLATE .. "/repo", TEMPLATE .. "/bare", TEMPLATE .. "/clone"
+  do
+    F.git(TEMPLATE, "init", "-q", "--template=", "-b", "main", "repo")
+    vim.fn.writefile({ "x" }, TPL_REPO .. "/f.txt")
+    F.git(TPL_REPO, "add", "-A")
+    F.git(TPL_REPO, "commit", "-q", "-m", "first")
+    F.git(TEMPLATE, "init", "-q", "--template=", "--bare", "-b", "main", "bare")
+    F.copy(TPL_REPO, TPL_CLONE)
+    F.append_config(
+      TPL_CLONE,
+      '[remote "origin"]\n\turl = unset\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n'
+        .. '[branch "main"]\n\tremote = origin\n\tmerge = refs/heads/main\n'
     )
   end
 
@@ -133,11 +146,7 @@ describe("gitsuite.features.dashboard", function()
 
     before_each(function()
       root = tmpdir("-gitsuite-dashboard-status")
-      vim.fn.mkdir(root .. "/repo1", "p")
-      git(root .. "/repo1", { "init", "-q", "-b", "main" })
-      vim.fn.writefile({ "x" }, root .. "/repo1/f.txt")
-      git(root .. "/repo1", { "add", "-A" })
-      git(root .. "/repo1", { "commit", "-q", "-m", "first" })
+      F.copy(TPL_REPO, root .. "/repo1")
     end)
 
     after_each(function()
@@ -149,7 +158,7 @@ describe("gitsuite.features.dashboard", function()
       status.scan_group({ root .. "/repo1" }, function(records, errors)
         result = { records = records, errors = errors }
       end)
-      vim.wait(2000, function()
+      vim.wait(WAIT_MS, function()
         return result ~= nil
       end)
 
@@ -167,11 +176,7 @@ describe("gitsuite.features.dashboard", function()
       local paths = {}
       for i = 1, 10 do
         local repo = ("%s/r%02d"):format(root, i)
-        vim.fn.mkdir(repo, "p")
-        git(repo, { "init", "-q", "-b", "main" })
-        vim.fn.writefile({ tostring(i) }, repo .. "/f.txt")
-        git(repo, { "add", "-A" })
-        git(repo, { "commit", "-q", "-m", "c" .. i })
+        F.copy(TPL_REPO, repo)
         paths[#paths + 1] = repo
       end
       vim.fn.writefile({ "changed" }, paths[7] .. "/f.txt")
@@ -180,7 +185,7 @@ describe("gitsuite.features.dashboard", function()
       status.scan_group(paths, function(records, errors)
         result = { records = records, errors = errors }
       end)
-      vim.wait(10000, function()
+      vim.wait(WAIT_MS, function()
         return result ~= nil
       end)
 
@@ -200,7 +205,7 @@ describe("gitsuite.features.dashboard", function()
       status.dashboard_detail(root .. "/repo1", function(result)
         lines = result
       end)
-      vim.wait(5000, function()
+      vim.wait(WAIT_MS, function()
         return lines ~= nil
       end)
 
@@ -222,11 +227,7 @@ describe("gitsuite.features.dashboard", function()
     it(
       "stream.on_discover fires synchronously with the full list, before any stream.on_record",
       function()
-        vim.fn.mkdir(root .. "/repo2", "p")
-        git(root .. "/repo2", { "init", "-q", "-b", "main" })
-        vim.fn.writefile({ "y" }, root .. "/repo2/f.txt")
-        git(root .. "/repo2", { "add", "-A" })
-        git(root .. "/repo2", { "commit", "-q", "-m", "first" })
+        F.copy(TPL_REPO, root .. "/repo2")
 
         local discovered
         local seen = {}
@@ -249,7 +250,7 @@ describe("gitsuite.features.dashboard", function()
         assert.equals(2, #discovered)
         assert.equals(0, #seen, "no repository has been read yet")
 
-        vim.wait(5000, function()
+        vim.wait(WAIT_MS, function()
           return completed
         end)
         assert.equals(2, #seen)
@@ -300,13 +301,10 @@ describe("gitsuite.features.dashboard", function()
 
     before_each(function()
       bare = tmpdir("-gitsuite-dashboard-actions-bare")
-      git(bare, { "init", "-q", "--bare", "-b", "main" })
+      F.copy(TPL_BARE, bare)
       clone = tmpdir("-gitsuite-dashboard-actions-clone")
-      local res = vim.system({ "git", "clone", "-q", bare, clone }):wait()
-      assert.equals(0, res.code)
-      vim.fn.writefile({ "x" }, clone .. "/f.txt")
-      git(clone, { "add", "-A" })
-      git(clone, { "commit", "-q", "-m", "first" })
+      F.copy(TPL_CLONE, clone)
+      F.point_remote(clone, "origin", bare)
     end)
 
     after_each(function()
@@ -319,7 +317,7 @@ describe("gitsuite.features.dashboard", function()
       actions.push(clone, function(ok_, err_)
         ok, err = ok_, err_
       end)
-      vim.wait(5000, function()
+      vim.wait(WAIT_MS, function()
         return ok ~= nil
       end)
       assert.is_true(ok)
@@ -331,7 +329,7 @@ describe("gitsuite.features.dashboard", function()
       actions.fetch(clone, function(ok_)
         ok = ok_
       end)
-      vim.wait(5000, function()
+      vim.wait(WAIT_MS, function()
         return ok ~= nil
       end)
       assert.is_true(ok)
@@ -414,7 +412,7 @@ describe("gitsuite.features.dashboard", function()
 
     it("classify: the default fetch lookup reads FETCH_HEAD of a real clone", function()
       local repo = tmpdir("-gitsuite-pull-scope")
-      git(repo, { "init", "-q", "-b", "main" })
+      F.copy(TPL_REPO, repo)
       local r = { name = "x", path = repo, behind = 0, has_upstream = true }
       local _, unknown = pull_scope.classify({ r })
       assert.same({ 1 }, unknown, "no FETCH_HEAD yet")
