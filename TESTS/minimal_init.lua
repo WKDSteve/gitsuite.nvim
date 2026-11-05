@@ -76,12 +76,14 @@ if #failures > 0 then
   os.exit(1)
 end
 
+-- testing:keep begin
 -- No git of the suite reads the user's own config, whichever spec or plugin code starts it: it would
 -- sign every fixture commit with the user's key (about four times the cost, unnoticed by CI, which
 -- signs nothing) and could change what the plugin's git does (`pull.rebase`, hooks).
 local no_config = vim.fn.has("win32") == 1 and "NUL" or "/dev/null"
 vim.env.GIT_CONFIG_GLOBAL = no_config
 vim.env.GIT_CONFIG_SYSTEM = no_config
+-- testing:keep end
 
 vim.opt.rtp:prepend(root)
 for _, name in ipairs(DEPS) do
