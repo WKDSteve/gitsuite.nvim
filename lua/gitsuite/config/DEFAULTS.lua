@@ -62,8 +62,8 @@ local DEFAULTS = {
     -- focused default. "behind" = only repositories behind their upstream
     -- (as of the last fetch); "all" = every repository on the page.
     pull_scope = "behind",
-    -- `gf` (fetch the whole page) runs this many fetches at once. Fetch only reads
-    -- the remote; push and pull stay one after another.
+    -- `gf` (fetch the whole page) and the syncs `gS`/`gs` run this many at once. Fetch
+    -- only reads the remote; `gp` and `gP` stay one after another.
     fetch_jobs = 4,
     -- `<RightMouse>` on the dashboard opens a menu of the same row/whole-page
     -- actions the keys already run (lib.nvim.contextmenu.bind_buffer),

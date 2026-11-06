@@ -26,13 +26,11 @@ M.MAX_NAMES = 8
 ---@field unknown integer[] Indices whose behind state is unknown
 ---@field all integer[] Every index
 
----@private
----@internal
 ---Names of `records[indices]`, shortened to `M.MAX_NAMES` plus a count.
 ---@param records RepoDashboardRecord[]
 ---@param indices integer[]
 ---@return string
-local function names_of(records, indices)
+function M.names_of(records, indices)
   local names = {}
   for i = 1, math.min(#indices, M.MAX_NAMES) do
     names[i] = records[indices[i]].name
@@ -88,7 +86,7 @@ function M.plan(records, scope, fetch_time)
   }
   if #unknown > 0 then
     lines[#lines + 1] = ("Behind state unknown (no upstream or not fetched yet), skipped by 'Only behind': %s"):format(
-      names_of(records, unknown)
+      M.names_of(records, unknown)
     )
   end
 

@@ -40,7 +40,9 @@
 --- `gp`/`gP`/`gf`/`gu`/`gS` are the whole-directory forms, ignoring marks: push,
 --- pull, fetch, update (fetch + ff-only pull, the same pair
 --- `:Git dashboard update` runs), or sync (fetch, then pull what is behind and
---- push what is ahead) every repository in the dashboard. Batches run
+--- push what is ahead) every repository in the dashboard; `gs` is that sync for
+--- just the repositories whose status on screen shows something to sync
+--- (`features.dashboard.sync_scope`). Batches run
 --- sequentially and report through `utils.progress` -- these are network
 --- calls, and forty simultaneous pushes are a rate limit or an auth-prompt
 --- storm -- except fetch and sync, which run `dashboard.fetch_jobs` at once:
@@ -1181,7 +1183,10 @@ local function _run_bulk(bufnr, records, verb, action_fn, targets)
     redraw = function()
       _redraw(bufnr, records)
     end,
-    handle = progress.create(("%s %d repositories"):format(verb, total), total),
+    handle = progress.create(
+      ("%s %d repositor%s"):format(verb, total, total == 1 and "y" or "ies"),
+      total
+    ),
     on_finish = function(results)
       local message, any_failed = bulk_report.format(verb, results, total)
       if any_failed then
@@ -1301,6 +1306,31 @@ local function _pull_all(ctx)
         return
       end
       _run_bulk(ctx.bufnr, ctx.records, "pull", repo_actions.pull, targets)
+    end,
+  })
+end
+
+---@private
+---@internal
+---`gs`: syncs only the repositories whose status on screen shows something to
+---sync, marks ignored. Runs the same `repo_actions.sync` as `gS`, so each target
+---is fetched once more and the direction is decided on the remote's state now: a
+---status gone stale since the last fetch ends in a reported divergence, not in a
+---wrong pull or push.
+---@param ctx DashboardRowContext
+---@return nil
+local function _sync_pending(ctx)
+  if _refuse_while_bulk() then return end
+  local plan = require("gitsuite.features.dashboard.sync_scope").plan(ctx.records)
+  if #plan.targets == 0 then
+    notify(plan.message, 3)
+    return
+  end
+  local targets = _targets_at(ctx.records, plan.targets)
+  kit.confirm({
+    question = plan.message,
+    on_answer = function(yes)
+      if yes then _run_bulk(ctx.bufnr, ctx.records, "sync", repo_actions.sync, targets) end
     end,
   })
 end
@@ -1729,6 +1759,13 @@ local ROW_KEYMAPS = {
     end,
   },
   {
+    keys = { "gs" },
+    desc = "Sync only the repositories the current status shows ahead or behind; no fetch of the rest (marks ignored)",
+    run = function(ctx)
+      _sync_pending(ctx)
+    end,
+  },
+  {
     keys = { "gS" },
     desc = "Sync every repository in the dashboard: fetch, then pull those behind and push those ahead; diverged ones are only reported (marks ignored)",
     run = function(ctx)
@@ -2044,7 +2081,7 @@ local function _context_menu_items(ctx)
   if #marked > 0 then
     contextmenu.group(
       out,
-      contextmenu.heading(("%d marked repositories"):format(#marked)),
+      contextmenu.heading(("%d marked repositor%s"):format(#marked, #marked == 1 and "y" or "ies")),
       contextmenu.entry(true, "Push", call("p"), "p"),
       contextmenu.entry(true, "Pull", call("P"), "P"),
       contextmenu.entry(true, "Fetch", call("f"), "f"),
@@ -2079,6 +2116,7 @@ local function _context_menu_items(ctx)
     contextmenu.entry(#ctx.records > 0, "Pull all…", call("gP"), "gP"),
     contextmenu.entry(#ctx.records > 0, "Push all", call("gp"), "gp"),
     contextmenu.entry(#ctx.records > 0, "Update all", call("gu"), "gu"),
+    contextmenu.entry(#ctx.records > 0, "Sync pending", call("gs"), "gs"),
     contextmenu.entry(#ctx.records > 0, "Sync all", call("gS"), "gS"),
     contextmenu.entry(#ctx.records > 0, "Export…", call("E"), "E")
   )

@@ -336,6 +336,85 @@ describe("gitsuite.features.dashboard", function()
     end)
   end)
 
+  describe("sync_scope: what gs syncs", function()
+    local sync_scope
+
+    before_each(function()
+      package.loaded["gitsuite.features.dashboard.sync_scope"] = nil
+      sync_scope = require("gitsuite.features.dashboard.sync_scope")
+    end)
+
+    local function rec(name, ahead, behind, has_upstream, state)
+      return {
+        name = name,
+        path = "/r/" .. name,
+        ahead = ahead,
+        behind = behind,
+        has_upstream = has_upstream ~= false,
+        state = state or "clean",
+      }
+    end
+
+    -- Only "never" has no fetch recorded.
+    local function fetch_time(path)
+      if path == "/r/never" then return nil end
+      return 1700000000
+    end
+
+    it("targets are the repositories only ahead or only behind, in row order", function()
+      local plan = sync_scope.plan({
+        rec("level", 0, 0),
+        rec("behind", 0, 3),
+        rec("ahead", 2, 0),
+        rec("diverged", 1, 1),
+        rec("no-upstream", 0, 0, false),
+        rec("never", 0, 0),
+        -- Dirty hides the counts in `state`; the commits to push are there all the same.
+        rec("dirty-ahead", 1, 0, true, "dirty"),
+      }, fetch_time)
+
+      assert.same({ 2, 3, 7 }, plan.targets)
+      assert.equals(1, plan.behind)
+      assert.equals(2, plan.ahead)
+      assert.same({ 4 }, plan.diverged)
+      assert.same({ 6 }, plan.unfetched)
+      local want = table.concat({
+        "Sync 3 repositories with something to sync (1 behind, 2 ahead)?",
+        "behind, ahead, dirty-ahead",
+        "Diverged, left alone (neither pull nor push can settle it): diverged",
+        "No fetch recorded, skipped (fetch first: gf): never",
+      }, "\n")
+      assert.equals(want, plan.message)
+    end)
+
+    it("a positive count is a target even without a recorded fetch", function()
+      local plan = sync_scope.plan({ rec("never", 0, 2) }, fetch_time)
+      assert.same({ 1 }, plan.targets)
+      assert.same({}, plan.unfetched)
+      assert.truthy(plan.message:find("Sync 1 repository with", 1, true), plan.message)
+    end)
+
+    it("no targets: the message says so and still names what was left out", function()
+      local plan = sync_scope.plan(
+        { rec("level", 0, 0), rec("diverged", 2, 5), rec("never", 0, 0) },
+        fetch_time
+      )
+      assert.same({}, plan.targets)
+      local want = table.concat({
+        "Nothing to sync: no repository is only ahead of or only behind its upstream",
+        "Diverged, left alone (neither pull nor push can settle it): diverged",
+        "No fetch recorded, skipped (fetch first: gf): never",
+      }, "\n")
+      assert.equals(want, plan.message)
+    end)
+
+    it("all level and fetched: one line, nothing named", function()
+      local plan = sync_scope.plan({ rec("a", 0, 0), rec("b", 0, 0, false) }, fetch_time)
+      assert.same({}, plan.targets)
+      assert.equals(1, #vim.split(plan.message, "\n", { plain = true }))
+    end)
+  end)
+
   describe("pull_scope: what gP offers to pull", function()
     local pull_scope
 

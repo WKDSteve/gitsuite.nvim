@@ -107,7 +107,7 @@ dashboard = {
   extra_paths = {},  -- repos merged onto the default page's scan; each entry must itself be a repository
   groups = {},       -- additional named pages, see below
   pull_scope = "behind", -- gP's focused default: "behind" (only repos behind upstream) or "all"
-  fetch_jobs = 4,    -- gf fetches this many repositories at once (1 to 16); push and pull stay one by one
+  fetch_jobs = 4,    -- gf, gS and gs work on this many repositories at once (1 to 16); gp and gP stay one by one
   context_menu = true, -- <RightMouse> opens the dashboard's own menu; false disables the binding only
 },
 ```

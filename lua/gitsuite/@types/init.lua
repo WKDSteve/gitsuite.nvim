@@ -39,7 +39,7 @@
 ---@field base_dir    string  Directory `:Git dashboard`/`:Git dashboard update` scan by default. Defaults to `$REPOS_DIR`.
 ---@field extra_paths string[]  Repositories merged onto the default page's scan; each entry must itself be a repository.
 ---@field groups      GitSuite.Config.Dashboard.Group[]  Additional named pages, see `GitSuite.Config.Dashboard.Group`.
----@field fetch_jobs  integer  Fetches `gf` runs at once (push and pull stay sequential).
+---@field fetch_jobs  integer  Fetches `gf` and syncs `gS`/`gs` run at once (`gp` and `gP` stay sequential).
 ---@field pull_scope  "behind"|"all"  Focused default of `gP`'s prompt: only repositories behind their upstream, or all.
 ---@field context_menu boolean `<RightMouse>` opens the dashboard's own menu (lib.nvim.contextmenu.bind_buffer) instead of ui.nvim's global one.
 

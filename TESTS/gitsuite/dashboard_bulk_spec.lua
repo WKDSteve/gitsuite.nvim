@@ -552,6 +552,67 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
     assert.is_nil(state.bulk_verb())
   end)
 
+  it("gs syncs only the repositories the status shows ahead or behind", function()
+    require("gitsuite.config").setup({ dashboard = { fetch_jobs = 4 } })
+    actions.sync = fake("sync")
+    local question
+    require("ui.kit").confirm = function(o)
+      question = o.question
+      o.on_answer(true)
+    end
+    local level, behind, ahead, diverged = record("r1"), record("r2"), record("r3"), record("r4")
+    behind.behind = 2
+    ahead.ahead = 1
+    diverged.ahead, diverged.behind = 1, 1
+    view.show({ level, behind, ahead, diverged }, { output = "buffer" })
+
+    press("gs")
+    assert.truthy(question:find("Sync 2 repositories with something to sync", 1, true), question)
+    assert.truthy(question:find("Diverged, left alone", 1, true), question)
+    assert.same({ "sync /fake/r2", "sync /fake/r3" }, calls)
+    assert.is_nil(state.phase("/fake/r1"), "a level repository is not part of the batch")
+    assert.is_nil(state.phase("/fake/r4"), "a diverged repository is not part of the batch")
+
+    release("sync /fake/r2", true)
+    release("sync /fake/r3", true)
+    wait_for(function()
+      return state.bulk_verb() == nil
+    end, "bulk finished")
+    assert.same({ "sync /fake/r2", "sync /fake/r3" }, calls)
+  end)
+
+  it("gs with nothing ahead or behind says so and asks nothing", function()
+    actions.sync = fake("sync")
+    local asked = false
+    require("ui.kit").confirm = function(o)
+      asked = true
+      o.on_answer(true)
+    end
+    view.show({ record("r1"), record("r2") }, { output = "buffer" })
+
+    press("gs")
+    assert.is_false(asked)
+    assert.same({}, calls)
+    assert.is_nil(state.bulk_verb())
+    assert.truthy(last_message():find("Nothing to sync", 1, true), last_message())
+  end)
+
+  it("gs acts on the repositories the question named, not on a later state", function()
+    actions.sync = fake("sync")
+    local answer
+    require("ui.kit").confirm = function(o)
+      answer = o.on_answer
+    end
+    local r1, r2 = record("r1"), record("r2")
+    r1.behind = 1
+    view.show({ r1, r2 }, { output = "buffer" })
+
+    press("gs")
+    r2.ahead = 3 -- changes while the question is open
+    answer(true)
+    assert.same({ "sync /fake/r1" }, calls)
+  end)
+
   -- GS: gitsuite.nvim/git-dashboard-gf-waehrend-eines-laufenden-batches-fragt-erst
   -- -- a second whole-page action during a batch is refused at once, without
   -- first asking a question whose yes could only be refused.
@@ -1318,6 +1379,7 @@ describe("gitsuite.features.dashboard.view: context menu", function()
       "Pull all…",
       "Push all",
       "Update all",
+      "Sync pending",
       "Sync all",
       "Export…",
     }, names)

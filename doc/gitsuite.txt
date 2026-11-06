@@ -115,7 +115,7 @@ around an unchanged underline apart).
 operates on the current buffer's repository, `dashboard` reads the git
 status of every repository in `dir`/`dashboard.base_dir` ($REPOS_DIR by
 default), or a configured `dashboard.groups` page. Row/marked-set/whole-
-page push, pull and fetch (`p`/`P`/`f`/`gp`/`gP`/`gf`/`gu`), page
+page push, pull, fetch and sync (`p`/`P`/`f`/`gp`/`gP`/`gf`/`gu`/`gS`/`gs`), page
 navigation (`<C-l>`/`<C-h>`), and per-page path add/remove (`a`/`x`) --
 moved here from reposcope.nvim's former `:Reposcope dashboard`/`update`.
 See docs/BINDINGS.md for the full key table, docs/configuration.md for
