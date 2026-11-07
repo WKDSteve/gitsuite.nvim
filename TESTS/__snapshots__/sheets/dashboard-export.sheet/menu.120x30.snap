@@ -1,0 +1,66 @@
+testing.nvim screen v1
+size: 120x30
+cursor: 3,34
+mode: n
+--- text
+01|                                ╭─────────────────────────────╮
+02|~                               │ ╭─ alpha ─────────────────╮ │
+03|~                               │ │ Open               <CR> │ │
+04|~                               │ │ Push                  p │ │
+05|~                               │ │ Pull                  P │ │
+06|~                               │ │ Fetch                 f │ │
+07|~                               │ │ Status                S │ │
+08|~                               │ │ Lazygit               L │ │
+09|~                               │ │ Re-read               r │ │
+10|~                               │ │ Mark                  m │ │
+11|~                               │ │ Yank path             y │ │
+12|~                               │ │ Remove from page      x │ │
+13|~                            ╭──│ ╰─────────────────────────╯ │2 repos · 1 dirty────────────╮
+14|~                            │  │ ╭─ Whole dashboard ───────╮ │sh  │  P Pull  │  ? Keys     │
+15|~                            │  │ │ Fetch all            gf │ │     STATE      LAST COMMIT  │
+16|~                            │  │ │ Pull all…            gP │ │     clean          ###      │
+17|~                            │  │ │ Push all             gp │ │   dirty (1)        ###      │
+18|~                            ╰──│ │ Update all           gu │ │─────────────────────────────╯
+19|~                               │ │ Sync pending         gs │ │
+20|~                               │ │ Sync all             gS │ │
+21|~                               │ │ Export…               E │ │
+22|~                               │ ╰─────────────────────────╯ │
+23|~                               ╰─────────────────────────────╯
+24|~
+25|~
+26|~
+27|~
+28|~
+29|[No Name]
+30|
+--- attrs
+01|                                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+02|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbacccccccccccccccccccccccccccccabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+03|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbadeddddddddddddddddddddffffdedabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+04|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+05|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+06|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+07|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+08|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+09|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+10|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+11|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+12|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+13|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbgggacccccccccccccccccccccccccccccaiiiiiiiiiiiiiiiiigggggggggggggbbbbbbbbbbbbbbbbbbbbbbbbbbb
+14|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbgjjacccccccccccccccccccccccccccccajjjjjjjkkjjjjjjjjjkkjjjjjjjjjgbbbbbbbbbbbbbbbbbbbbbbbbbbb
+15|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbgllagcgggggggggggggggggggggghhgcgalllllllllllllllllllllllllllgggbbbbbbbbbbbbbbbbbbbbbbbbbbb
+16|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbgmmagcgggggggggggggggggggggghhgcgammmmmnnnnnmmmmmmmmmm###mmmmmmgbbbbbbbbbbbbbbbbbbbbbbbbbbb
+17|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbgggagcgggggggggggggggggggggghhgcgagggooooooooogggggggg###gggggggbbbbbbbbbbbbbbbbbbbbbbbbbbb
+18|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbgggagcgggggggggggggggggggggghhgcgaggggggggggggggggggggggggggggggbbbbbbbbbbbbbbbbbbbbbbbbbbb
+19|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcgggggggggggggggggggggghhgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+20|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcgggggggggggggggggggggghhgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+21|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbagcggggggggggggggggggggggghgcgabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+22|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbacccccccccccccccccccccccccccccabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+23|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+24|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+25|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+26|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+27|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+28|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+29|pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+30|qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
