@@ -19,11 +19,11 @@ mode: n
 14|~                            │    <CR> Open  │  m Mark  │  p Push  │  P Pull  │  ? Keys     │
 15|~                            │  REPOSITORY  BRANCH     SYNC         STATE      LAST COMMIT  │
 16|~                            │  alpha        main   no upstream     clean          ###      │
-17|~                            │╭<port all to╮ main   no upstream   dirty (1)        ###      │
-18|~                            ╰│Clipboard   │────────────────────────────────────────────────╯
-19|~                             │New buffer  │
-20|~                             │File        │
-21|~                             ╰────────────╯
+17|~                            │╭─Export all to─╮in   no upstream   dirty (1)        ###      │
+18|~                            ╰│Clipboard      │─────────────────────────────────────────────╯
+19|~                             │New buffer     │
+20|~                             │File           │
+21|~                             ╰───────────────╯
 22|~
 23|~
 24|~
@@ -50,11 +50,11 @@ mode: n
 14|aaaaaaaaaaaaaaaaaaaaaaaaaaaaabddddeeeeedddddddddeedddddddddeedddddddddeedddddddddeedddddddddbaaaaaaaaaaaaaaaaaaaaaaaaaaa
 15|aaaaaaaaaaaaaaaaaaaaaaaaaaaaabffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffbbbaaaaaaaaaaaaaaaaaaaaaaaaaaa
 16|aaaaaaaaaaaaaaaaaaaaaaaaaaaaabgghhhhhggggggggiiiigggggggggggggggggggjjjjjgggggggggg###ggggggbaaaaaaaaaaaaaaaaaaaaaaaaaaa
-17|aaaaaaaaaaaaaaaaaaaaaaaaaaaaabbccccccccccccbbkkkkbbbbbbbbbbbbbbbbblllllllllbbbbbbbb###bbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaa
-18|aaaaaaaaaaaaaaaaaaaaaaaaaaaaabbmmmmmmmmmmmmbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaa
-19|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-20|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-21|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+17|aaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbcccccccccccccbbkkbbbbbbbbbbbbbbbbblllllllllbbbbbbbb###bbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaa
+18|aaaaaaaaaaaaaaaaaaaaaaaaaaaaabbmmmmmmmmmmmmmmmbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaa
+19|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+20|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+21|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 22|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 23|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 24|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
