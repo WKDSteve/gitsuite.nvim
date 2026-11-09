@@ -111,6 +111,27 @@ return {
       layout = "hosted",
       -- the steps that depend on the platform: the windows and macOS legs run only these
       platform = { "suite", "conformance" },
+      -- the optional plugins the test sheet git-optional loads (TESTS/sheets/minit-extra.lua finds them below .deps/);
+      -- without them, or without ripgrep, it is a reported skip. open.nvim and insights.nvim publish no ci-verified
+      -- branch yet, so they are pinned to a commit of main: bump on purpose, as the sheet's snapshots depend on them.
+      checkouts = {
+        {
+          repo = "WKDSteve/open.nvim",
+          ref = "7825542826071cef30e724b6dcab240eab514994",
+          why = "only the test sheet git-optional loads it (:Git browse)",
+        },
+        {
+          repo = "WKDSteve/insights.nvim",
+          ref = "2af9030a4773b0a4e71aac13f64226d0b1ef7d20",
+          why = "only the test sheet git-optional loads it (:Git status todos, :Git conflict list)",
+        },
+        {
+          repo = "lewis6991/gitsigns.nvim",
+          ref = "ef707fb93301a9b856f36eae4c8f56f5b988a794",
+          why = "only the test sheet git-optional loads it (:Git hunk)",
+        },
+      },
+      packages = { { name = "ripgrep", why = "insights.nvim scans with it (the sheet git-optional)" } },
     },
     steps = {
       ["workflow-in-sync"] = { preset = "workflow-in-sync" },

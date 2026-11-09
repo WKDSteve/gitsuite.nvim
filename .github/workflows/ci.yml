@@ -67,6 +67,30 @@ jobs:
           repository: WKDSteve/ui.nvim
           path: .deps/ui.nvim
           ref: ci-verified
+      # only the test sheet git-optional loads it (:Git browse)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          repository: WKDSteve/open.nvim
+          path: .deps/open.nvim
+          # Pinned: a commit whose own CI was green (no ci-verified branch to follow). Bump on purpose.
+          ref: 7825542826071cef30e724b6dcab240eab514994
+      # only the test sheet git-optional loads it (:Git status todos, :Git conflict list)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          repository: WKDSteve/insights.nvim
+          path: .deps/insights.nvim
+          # Pinned: a commit whose own CI was green (no ci-verified branch to follow). Bump on purpose.
+          ref: 2af9030a4773b0a4e71aac13f64226d0b1ef7d20
+      # only the test sheet git-optional loads it (:Git hunk)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          repository: lewis6991/gitsigns.nvim
+          path: .deps/gitsigns.nvim
+          # Pinned: third-party code runs inside the specs on the self-hosted runner. Bump on purpose.
+          ref: ef707fb93301a9b856f36eae4c8f56f5b988a794
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
@@ -95,6 +119,16 @@ jobs:
         if: matrix.hosted && matrix.steps == ''
       - if: matrix.hosted && matrix.steps == ''
         run: luarocks install luacheck 1.2.0
+      # ripgrep: insights.nvim scans with it (the sheet git-optional)
+      - name: Install ripgrep (Linux)
+        if: matrix.hosted && runner.os == 'Linux'
+        run: sudo apt-get install -y ripgrep
+      - name: Install ripgrep (macOS)
+        if: matrix.hosted && runner.os == 'macOS'
+        run: brew install ripgrep
+      - name: Install ripgrep (Windows)
+        if: matrix.hosted && runner.os == 'Windows'
+        run: choco install ripgrep -y --no-progress
       # The result cache (docs/CI-CACHE.md of testing.nvim). The key is only the transport: every entry carries its
       # own full spec key and is checked against it when read, so a wrong restore can lower the hit rate and never turn
       # a result green. A pull request only restores; only a push to main saves.
