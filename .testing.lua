@@ -111,6 +111,8 @@ return {
       layout = "hosted",
       -- the steps that depend on the platform: the windows and macOS legs run only these
       platform = { "suite", "conformance" },
+      -- `testing ci land`: a check branch ci/** runs the hosted legs, main moves to a commit only once it is green there
+      land = true,
       -- the optional plugins the test sheet git-optional loads (TESTS/sheets/minit-extra.lua finds them below .deps/);
       -- without them, or without ripgrep, it is a reported skip. open.nvim and insights.nvim publish no ci-verified
       -- branch yet, so they are pinned to a commit of main: bump on purpose, as the sheet's snapshots depend on them.
