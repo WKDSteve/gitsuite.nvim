@@ -107,16 +107,14 @@ jobs:
           persist-credentials: false
           repository: WKDSteve/open.nvim
           path: .deps/open.nvim
-          # Pinned: a commit whose own CI was green (no ci-verified branch to follow). Bump on purpose.
-          ref: 7825542826071cef30e724b6dcab240eab514994
+          ref: ci-verified
       # only the test sheet git-optional loads it (:Git status todos, :Git conflict list)
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
           repository: WKDSteve/insights.nvim
           path: .deps/insights.nvim
-          # Pinned: a commit whose own CI was green (no ci-verified branch to follow). Bump on purpose.
-          ref: 2af9030a4773b0a4e71aac13f64226d0b1ef7d20
+          ref: ci-verified
       # only the test sheet git-optional loads it (:Git hunk)
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
