@@ -68,6 +68,9 @@ see `lua/gitsuite/bindings/keymaps.lua`):
 | `:Git hunk stage` | Stage the hunk under the cursor |
 | `:Git hunk stage-buffer` | Stage every hunk in the current buffer |
 | `:Git hunk toggle-deleted` | Toggle showing deleted lines inline |
+| `:Git hooks install [--repo=<dir>] [--hook=<no-claude-trailer\|large-files>] [--all]` | Install the prepared hooks (commit-msg without Claude trailers, pre-commit large-file warning) as one-line wrappers; foreign hooks are never overwritten, repositories with their own core.hooksPath get the line to add by hand (`--all`: every repository of dashboard.base_dir) |
+| `:Git hooks list [--repo=<dir>]` | Show which prepared hooks exist and which are installed in this repository |
+| `:Git hooks uninstall [--repo=<dir>] [--hook=<no-claude-trailer\|large-files>] [--all]` | Remove gitsuite's own hooks; a hook that is not ours is left alone |
 | `:Git plugins` | Open the report tab: the last one shown in this Neovim, else the newest stored report (never a scan; :Git plugins report builds one) |
 | `:Git plugins log [{target:GITSUITE_PLUGIN_OR_REPO}] [{n:INT}] [--out=<picker\|buffer\|clipboard>] [--count=<value>]` | Show the newest commits of an installed plugin (or any clone): picker with preview, --count=<n>, --out=buffer\|clipboard |
 | `:Git plugins report [--mode=<updated\|pending>] [--out=<tab\|buffer\|clipboard\|path>] [--to=<value>] [--all] [--last] [--no-open] [--fetch] [--yes]` | Report what changed in the installed plugins: the last update (--mode=updated) or what is pending (--mode=pending); reads local state only, unless --fetch |

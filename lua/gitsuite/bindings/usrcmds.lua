@@ -408,6 +408,72 @@ local function build_routes()
       end,
     },
 
+    -- hooks: prepared git hooks, installed as one-line wrappers; a foreign hook is never overwritten
+    {
+      path = { "hooks", "list" },
+      flags = {
+        {
+          name = "repo",
+          type = "DIR",
+          desc = "Repository (default: the one of this buffer / the cwd)",
+        },
+      },
+      desc = "Show which prepared hooks exist and which are installed in this repository",
+      run = function(ctx)
+        require("gitsuite.bindings.hooks_cmd").list(ctx.flags.repo)
+      end,
+    },
+    {
+      path = { "hooks", "install" },
+      flags = {
+        {
+          name = "repo",
+          type = "DIR",
+          desc = "Repository (default: the one of this buffer / the cwd)",
+        },
+        {
+          name = "hook",
+          type = "STRING",
+          enum = { "no-claude-trailer", "large-files" },
+          desc = "Only this hook (default: all)",
+        },
+        {
+          name = "all",
+          bool = true,
+          desc = "Every repository of dashboard.base_dir instead of one",
+        },
+      },
+      desc = "Install the prepared hooks (commit-msg without Claude trailers, pre-commit large-file warning); foreign hooks are never overwritten, repositories with their own core.hooksPath get the line to add by hand",
+      run = function(ctx)
+        require("gitsuite.bindings.hooks_cmd").run("install", ctx.flags)
+      end,
+    },
+    {
+      path = { "hooks", "uninstall" },
+      flags = {
+        {
+          name = "repo",
+          type = "DIR",
+          desc = "Repository (default: the one of this buffer / the cwd)",
+        },
+        {
+          name = "hook",
+          type = "STRING",
+          enum = { "no-claude-trailer", "large-files" },
+          desc = "Only this hook (default: all)",
+        },
+        {
+          name = "all",
+          bool = true,
+          desc = "Every repository of dashboard.base_dir instead of one",
+        },
+      },
+      desc = "Remove gitsuite's own hooks; a hook that is not ours is left alone",
+      run = function(ctx)
+        require("gitsuite.bindings.hooks_cmd").run("uninstall", ctx.flags)
+      end,
+    },
+
     -- plugins: the history of the clones a plugin manager installed. Reads
     -- only (never changes a clone; fetches only on `report --fetch`). `log` is a
     -- single-repository action like `ui lazygit [dir]`; `report` covers every
