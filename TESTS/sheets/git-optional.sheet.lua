@@ -62,9 +62,22 @@ return {
       lua = [[vim.cmd("cclose"); vim.cmd("edit " .. vim.fn.fnameescape(_G.repo .. "/notes.txt"))
       require("gitsigns").setup({}); vim.cmd("edit!"); vim.api.nvim_win_set_cursor(0, { 4, 0 }); _G.forget()]],
     },
-    { lua = [[vim.cmd("Gitsigns attach")]], note = "the sheet's child does not attach on its own" },
     {
-      wait = [[(function() local ok, h = pcall(function() return require("gitsigns").get_hunks() end) return ok and h ~= nil and #h == 1 end)()]],
+      lua = [[vim.cmd("Gitsigns attach"); _G.gs_attach_at = vim.uv.now()]],
+      note = "the sheet's child does not attach on its own",
+    },
+    {
+      -- Once red on the hosted Windows leg (run 42726969266): the one attach never landed. Retry it every
+      -- 2 s while the buffer has no gitsigns state, instead of waiting on a single attempt.
+      wait = [[(function()
+        local now = vim.uv.now()
+        if vim.b.gitsigns_status_dict == nil and now - (_G.gs_attach_at or 0) > 2000 then
+          _G.gs_attach_at = now
+          pcall(vim.cmd, "Gitsigns attach")
+        end
+        local ok, h = pcall(function() return require("gitsigns").get_hunks() end)
+        return ok and h ~= nil and #h == 1
+      end)()]],
       timeout = 10000,
       note = "gitsigns has attached and sees the added line",
     },
