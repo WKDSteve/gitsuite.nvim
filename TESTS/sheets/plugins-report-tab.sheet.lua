@@ -10,6 +10,7 @@
 -- attribute letters, not colours), real blobless lazy clones and the real browser stay with a person.
 return {
   id = "gitsuite.plugins-report-tab",
+  feature = "gitsuite.plugins-report",
   title = "gitsuite.nvim: report tab of :Git plugins (keys, layout, colours)",
   task = "gitsuite.nvim/live-test-checklist",
   engine = "rpc",

@@ -6,6 +6,7 @@
 -- hunk (needs gitsigns.nvim), ui neogit/lazygit/diffview and dashboard update (external programs).
 return {
   id = "gitsuite.repo",
+  feature = "gitsuite.repo",
   title = ":Git branch, status and blame on a real repository",
   task = "gitsuite.nvim/testblatt-bindings-checkliste",
   sizes = { { rows = 40, cols = 120 } },

@@ -7,6 +7,7 @@
 -- stage/reset (gitsigns.nvim, the staged result is read back with `git diff --cached`).
 return {
   id = "gitsuite.optional",
+  feature = "gitsuite.adapters",
   title = ":Git browse, status todos, conflict list and hunk with the optional plugins",
   task = "gitsuite.nvim/testblatt-bindings-checkliste",
   minit = "TESTS/sheets/minit-extra.lua",

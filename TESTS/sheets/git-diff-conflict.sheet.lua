@@ -4,6 +4,7 @@
 -- with conflict markers.
 return {
   id = "gitsuite.diff-conflict",
+  feature = "gitsuite.conflict",
   title = ":Git diff and :Git conflict on a real repository",
   task = "gitsuite.nvim/testblatt-bindings-checkliste",
   sizes = { { rows = 40, cols = 120 } },

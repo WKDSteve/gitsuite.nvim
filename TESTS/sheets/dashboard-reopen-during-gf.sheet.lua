@@ -15,6 +15,7 @@
 -- (slow, failing) and the feel stay with a person.
 return {
   id = "gitsuite.dashboard-reopen-during-gf",
+  feature = "gitsuite.dashboard",
   title = "gitsuite.nvim: close and reopen :Git dashboard while gf runs (local remotes)",
   task = "gitsuite.nvim/live-test-checklist",
   engine = "rpc",

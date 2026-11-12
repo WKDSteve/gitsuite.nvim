@@ -11,6 +11,7 @@
 -- The look of the lists, the real system clipboard and a Windows path typed by hand stay with a person.
 return {
   id = "gitsuite.dashboard-export",
+  feature = "gitsuite.dashboard-export",
   title = "gitsuite.nvim: E exports a dashboard report to the clipboard, a new buffer or a file",
   task = "gitsuite.nvim/dashboard-export-e-im-echten-neovim-ausprobieren",
   engine = "rpc",
