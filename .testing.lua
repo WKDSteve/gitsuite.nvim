@@ -11,6 +11,9 @@ return {
   -- Dependencies (directory names) put on the runtimepath: $<NAME>_DIR, .deps/<name>, ../<name>,
   -- stdpath('data')/lazy/<name>.
   deps = { "diff.nvim", "lib.nvim", "ui.nvim" },
+  -- A spec file runs in a child editor that inherits only an allowlist of the environment: lazy_sync_spec.lua runs
+  -- lazy.nvim's real event handler from $LAZY_NVIM_DIR when it is set.
+  env_allow = { "LAZY_NVIM_DIR" },
   -- "none" = all specs in one nvim, "file" = one nvim per spec file.
   isolated = "file",
   -- "c" = child started from a -c command (v:vim_did_enter is 0), "l" = `nvim -l` like the old runner.
@@ -135,7 +138,9 @@ return {
           why = "only the test sheet git-optional loads it (:Git hunk)",
         },
       },
-      packages = { { name = "ripgrep", why = "insights.nvim scans with it (the sheet git-optional)" } },
+      packages = {
+        { name = "ripgrep", why = "insights.nvim scans with it (the sheet git-optional)" },
+      },
     },
     steps = {
       ["workflow-in-sync"] = { preset = "workflow-in-sync" },

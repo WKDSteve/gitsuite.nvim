@@ -125,7 +125,10 @@ describe("gitsuite.features.hooks", function()
   end)
 
   it("the shipped commit-msg script strips Claude trailers and keeps the rest", function()
-    if vim.fn.executable("bash") == 0 then return end
+    if vim.fn.executable("bash") == 0 then
+      pending("bash not on PATH")
+      return
+    end
     local e = hooks.find("no-claude-trailer")
     local msg = base .. "-msg.txt"
     local f = assert(io.open(msg, "wb"))
