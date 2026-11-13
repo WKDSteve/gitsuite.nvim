@@ -85,3 +85,31 @@ question each page answers.
 ## License
 
 gitsuite.nvim is released under the [MIT License](https://opensource.org/licenses/MIT) — see [LICENSE](LICENSE).
+
+<!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
+## Connections
+
+![gitsuite.nvim: what it uses and what uses it](assets/graphs/gitsuite.nvim.png)
+
+**Uses**
+
+- [color_my_ascii.nvim](https://github.com/WKDSteve/color_my_ascii.nvim): The conflict feature of gitsuite.nvim filters out regions inside fenced blocks, using the fences of color_my_ascii.nvim (`color_my_ascii.api.fences`). ([picture](assets/graphs/pair/gitsuite.nvim--color_my_ascii.nvim.png))
+- [diff.nvim](https://github.com/WKDSteve/diff.nvim): The diff commands of gitsuite.nvim run through diff.nvim, for example `require("diff").run("target=git:HEAD")`. ([picture](assets/graphs/pair/gitsuite.nvim--diff.nvim.png))
+- [filetree.nvim](https://github.com/WKDSteve/filetree.nvim): The status relink of gitsuite.nvim uses `filetree.refs` of filetree.nvim when it is installed. ([picture](assets/graphs/pair/gitsuite.nvim--filetree.nvim.png))
+- [insights.nvim](https://github.com/WKDSteve/insights.nvim): gitsuite.nvim lists conflicts with the conflict finder of insights.nvim (`insights.conflicts`) when it is installed. ([picture](assets/graphs/pair/gitsuite.nvim--insights.nvim.png))
+- [open.nvim](https://github.com/WKDSteve/open.nvim): gitsuite.nvim opens the web address of a repository through the registry of open.nvim (`open.registry`) when it is installed. ([picture](assets/graphs/pair/gitsuite.nvim--open.nvim.png))
+- [pickers.nvim](https://github.com/WKDSteve/pickers.nvim): gitsuite.nvim picks through the engines of pickers.nvim (`integrations.pickers_nvim`) when it is installed. ([picture](assets/graphs/pair/gitsuite.nvim--pickers.nvim.png))
+- [sessions.nvim](https://github.com/WKDSteve/sessions.nvim): In its branch feature, gitsuite.nvim saves and loads a session through sessions.nvim (`sessions.core`). ([picture](assets/graphs/pair/gitsuite.nvim--sessions.nvim.png))
+- [terminal.nvim](https://github.com/WKDSteve/terminal.nvim): gitsuite.nvim runs lazygit through the facade of terminal.nvim (`terminal.run`) when that is new enough; its own float is the fallback. ([picture](assets/graphs/pair/gitsuite.nvim--terminal.nvim.png))
+- [ui.nvim](https://github.com/WKDSteve/ui.nvim): The dashboard and the plugin report window of gitsuite.nvim are built on the kit of ui.nvim (`ui.kit`). ([picture](assets/graphs/pair/gitsuite.nvim--ui.nvim.png))
+- [lib.nvim](https://github.com/WKDSteve/lib.nvim): the shared base of the plugins.
+
+**Used by**
+
+- [ai.nvim](https://github.com/WKDSteve/ai.nvim): With gitsuite.nvim installed, ai.nvim can add the merge conflict under the cursor to its context (`context.conflict`). ([picture](assets/graphs/pair/ai.nvim--gitsuite.nvim.png))
+- [cmdlog.nvim](https://github.com/WKDSteve/cmdlog.nvim): cmdlog.nvim can open the git UI of gitsuite.nvim from a mapping (`gitsuite.features.ui`). ([picture](assets/graphs/pair/cmdlog.nvim--gitsuite.nvim.png))
+- [debugging.nvim](https://github.com/WKDSteve/debugging.nvim): The reports of debugging.nvim ask gitsuite.nvim whether a buffer has merge conflicts (`gitsuite.features.conflict`). ([picture](assets/graphs/pair/debugging.nvim--gitsuite.nvim.png))
+- [fileops.nvim](https://github.com/WKDSteve/fileops.nvim): The conflict marks of fileops.nvim use the conflict feature of gitsuite.nvim (`gitsuite.features.conflict`) when it is installed. ([picture](assets/graphs/pair/fileops.nvim--gitsuite.nvim.png))
+- [sandbox.nvim](https://github.com/WKDSteve/sandbox.nvim): Before a devcontainer build, sandbox.nvim asks gitsuite.nvim whether there are unresolved conflicts (`gitsuite.features.conflict`). ([picture](assets/graphs/pair/sandbox.nvim--gitsuite.nvim.png))
+- [ui.nvim](https://github.com/WKDSteve/ui.nvim): The right-click menu of ui.nvim has a 'Git Actions' row from gitsuite.nvim (`gitsuite.integrations.menu`). ([picture](assets/graphs/pair/ui.nvim--gitsuite.nvim.png))
+<!-- connections:end -->
