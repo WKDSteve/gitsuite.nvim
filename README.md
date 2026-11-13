@@ -1,3 +1,5 @@
+![gitsuite-nvim](assets/icons/gitsuite-nvim/png/gitsuite-nvim-128.png)
+
 > **Alpha stage — active development.** Every `:Git` subcommand is a real
 > implementation (see [docs/BINDINGS.md](docs/BINDINGS.md) for the full
 > list), but the surface is not frozen: breaking changes are still
