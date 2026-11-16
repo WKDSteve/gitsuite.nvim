@@ -234,7 +234,8 @@ there. By default gitsuite writes nothing in such a repository: the result is
 
 `--into-versioned` adds that line for you, to the hook file in that folder
 (for example `.husky/commit-msg`; created with a `#!/usr/bin/env sh` line if it
-is missing, otherwise appended, before a last `exec` line). It does nothing
+is missing, otherwise appended, before a last `exec` line; with husky 9, whose
+`core.hooksPath` is the generated `.husky/_`, the file in `.husky/`). It does nothing
 else: no commit and no change to the git config. The change shows up in
 `git status`; review it and commit it yourself, or leave it uncommitted. The
 line names the script in your gitsuite checkout and runs it only where that

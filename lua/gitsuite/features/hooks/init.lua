@@ -123,7 +123,13 @@ function M.inspect(repo)
     if not (dir:match("^/") or dir:match("^%a:[/\\]")) then
       dir = (git(repo, "rev-parse", "--show-toplevel") or repo) .. "/" .. dir
     end
-    result.versioned_dir = vim.fs.normalize(dir)
+    dir = vim.fs.normalize(dir)
+    -- husky 9 points core.hooksPath at `.husky/_`: generated, ignored by git, rewritten on every install, and its
+    -- wrappers end in `exit` after running the hook of the same name in `.husky/`. That one is the versioned file.
+    if vim.fs.basename(dir) == "_" and vim.fs.basename(vim.fs.dirname(dir)) == ".husky" then
+      dir = vim.fs.dirname(dir)
+    end
+    result.versioned_dir = dir
   end
 
   for _, e in ipairs(CATALOG) do

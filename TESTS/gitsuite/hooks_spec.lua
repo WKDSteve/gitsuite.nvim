@@ -214,6 +214,34 @@ describe("gitsuite.features.hooks", function()
       assert.is_nil(vim.uv.fs_stat(repo .. "/.husky/pre-commit"))
     end)
 
+    it(
+      "husky 9 (core.hooksPath = .husky/_): the line goes to .husky/, not the generated folder",
+      function()
+        local repo = new_repo("v7")
+        vim.fn.mkdir(repo .. "/.husky/_", "p")
+        local generated = '#!/usr/bin/env sh\n. "$(dirname "$0")/h"\n'
+        write_file(repo .. "/.husky/_/commit-msg", generated)
+        write_file(repo .. "/.husky/_/.gitignore", "*\n")
+        git(repo, "config", "--local", "core.hooksPath", ".husky/_")
+
+        assert.equals(repo .. "/.husky", hooks.inspect(repo).versioned_dir)
+        local res = by_id(hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true }))
+        assert.equals(
+          "installed",
+          res["no-claude-trailer"].status,
+          res["no-claude-trailer"].message
+        )
+        assert.equals(
+          generated,
+          read(repo .. "/.husky/_/commit-msg"),
+          "husky's wrapper is untouched"
+        )
+        assert.truthy(
+          read(repo .. "/.husky/commit-msg"):find("# gitsuite-hook: no-claude-trailer", 1, true)
+        )
+      end
+    )
+
     it("a commit runs the line: the Claude trailer is gone", function()
       if vim.fn.executable("bash") == 0 then
         pending("bash not on PATH")
