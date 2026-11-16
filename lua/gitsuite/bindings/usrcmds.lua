@@ -442,8 +442,13 @@ local function build_routes()
           bool = true,
           desc = "Every repository of dashboard.base_dir instead of one",
         },
+        {
+          name = "into-versioned",
+          bool = true,
+          desc = "In a repository with its own core.hooksPath, add the line to the hook file there (no commit)",
+        },
       },
-      desc = "Install the prepared hooks (commit-msg without Claude trailers, pre-commit large-file warning); foreign hooks are never overwritten, repositories with their own core.hooksPath get the line to add by hand",
+      desc = "Install the prepared hooks (commit-msg without Claude trailers, pre-commit large-file warning); foreign hooks are never overwritten, repositories with their own core.hooksPath get the line to add by hand (--into-versioned: added to their hook file, not committed)",
       run = function(ctx)
         require("gitsuite.bindings.hooks_cmd").run("install", ctx.flags)
       end,
@@ -467,8 +472,13 @@ local function build_routes()
           bool = true,
           desc = "Every repository of dashboard.base_dir instead of one",
         },
+        {
+          name = "into-versioned",
+          bool = true,
+          desc = "In a repository with its own core.hooksPath, take gitsuite's line out of the hook file there",
+        },
       },
-      desc = "Remove gitsuite's own hooks; a hook that is not ours is left alone",
+      desc = "Remove gitsuite's own hooks; a hook that is not ours is left alone (--into-versioned: gitsuite's line out of a versioned core.hooksPath hook)",
       run = function(ctx)
         require("gitsuite.bindings.hooks_cmd").run("uninstall", ctx.flags)
       end,

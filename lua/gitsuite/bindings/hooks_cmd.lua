@@ -40,7 +40,9 @@ function M.run(action, flags)
     return
   end
   local ids = flags and flags.hook and { flags.hook } or nil
-  local results = hooks.each(repos, action == "install" and hooks.install or hooks.uninstall, ids)
+  local opts = { into_versioned = flags and flags["into-versioned"] == true }
+  local results =
+    hooks.each(repos, action == "install" and hooks.install or hooks.uninstall, ids, opts)
   local level = vim.log.levels.INFO
   for _, r in ipairs(results) do
     if r.status == "error" or r.status == "foreign" or r.status == "manual" then

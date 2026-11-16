@@ -5,7 +5,7 @@ Full sub-command reference: → [BINDINGS.md](BINDINGS.md)
 ## One command tree, one dispatch needle
 
 Every `:Git <scope> <action>` invocation — `conflict`, `hunk`, `blame`,
-`diff`, `browse`, `branch`, `ui`, `status`, `plugins`, `dashboard` — is a leaf in a
+`diff`, `browse`, `branch`, `ui`, `status`, `plugins`, `dashboard`, `hooks` — is a leaf in a
 single route tree registered through `lib.nvim.bindings.usercmd.composer`.
 That one tree drives three things at once, never out of sync with each
 other:
@@ -216,6 +216,37 @@ changed nothing (the read has already moved an unreadable store aside then).
 `plugins.keep_reports`/`max_age_days` bound it, the newest report is never
 rotated out. After each report `User GitsuitePluginsReported` fires (see
 `doc/gitsuite.txt` §7).
+
+## `hooks` — prepared git hooks
+
+`:Git hooks install` puts two prepared hooks into a repository: `commit-msg`
+removes `Co-Authored-By:` trailers that name Claude or Anthropic, `pre-commit`
+warns about staged files above 5 MB. Each is a one-line wrapper in
+`.git/hooks/` that calls the script in gitsuite's own checkout, so a later
+change to the script needs no reinstall. A hook that is not gitsuite's is never
+overwritten or removed. `:Git hooks list` shows what is installed,
+`:Git hooks uninstall` takes gitsuite's own hooks out again.
+
+**A repository with its own `core.hooksPath`** (`.husky`, `scripts/hooks`)
+keeps its hooks in a versioned folder, and git no longer reads `.git/hooks/`
+there. By default gitsuite writes nothing in such a repository: the result is
+`manual`, with the line to add to the hook there yourself.
+
+`--into-versioned` adds that line for you, to the hook file in that folder
+(for example `.husky/commit-msg`; created with a `#!/usr/bin/env sh` line if it
+is missing, otherwise appended, before a last `exec` line). It does nothing
+else: no commit and no change to the git config. The change shows up in
+`git status`; review it and commit it yourself, or leave it uncommitted. The
+line names the script in your gitsuite checkout and runs it only where that
+file exists, so on another machine or in another clone it does nothing. A
+failure of the script still stops the commit. `:Git hooks uninstall
+--into-versioned` takes the line out again, and removes a hook file that held
+nothing else.
+
+```vim
+:Git hooks install --repo=~/src/web-app --into-versioned
+:Git hooks uninstall --repo=~/src/web-app --into-versioned
+```
 
 ## Rename the command
 
