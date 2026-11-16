@@ -330,6 +330,14 @@ return {
       end)() == true]],
       note = "every key is listed and no line is wider than the window (nothing cut)",
     },
+    {
+      expect = [[(function()
+        local w = _G.float()
+        local n = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(w))
+        return vim.api.nvim_win_get_height(w) >= n or ("%d of %d lines shown"):format(vim.api.nvim_win_get_height(w), n)
+      end)() == true]],
+      note = "the whole list is on the screen, no line reached only by scrolling (30 rows too)",
+    },
     { screen = "help", masks = { "%d%d%d%d%-%d%d%-%d%d %d%d:%d%d" } },
     { keys = "q", note = "close the key list" },
     {
@@ -379,7 +387,7 @@ return {
   },
   judge = {
     "The layout reads well: list and preview side by side at 160 columns, one above the other at 120; the legend fits; at 160 the summary takes two lines (the counts below the date and the view) and reads well",
-    "The ? list at 120x30 is taller than the screen: its last rows (?, q / <Esc>) are reached by scrolling -- acceptable, or should it fit?",
+    "The ? list fits at 120x30 without scrolling (one line per key; the title says q / <Esc> closes it) and reads well",
     "The O menu names each action with its first key only (o, not o / K) -- reads well?",
   },
   manual = {

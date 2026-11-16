@@ -197,14 +197,20 @@ local function lhs_text(key)
   return table.concat(key.keys, " / ")
 end
 
----The lines of the `?` list: every key, aligned.
+---The title of the `?` list. It also says how to close the list: the title
+---stays on screen at any height, a last line would scroll out of a short one.
+M.HELP_TITLE = "GitSuite Plugins Report Keys · q / <Esc> close"
+
+---The lines of the `?` list: every key, aligned, one line each and nothing
+---else (the title names the list and how to close it), so the list fits a
+---30-row screen without scrolling.
 ---@return string[]
 function M.help_lines()
   local widest = 0
   for _, k in ipairs(M.KEYS) do
     widest = math.max(widest, vim.fn.strdisplaywidth(lhs_text(k)))
   end
-  local lines = { "", " Plugins report keys", "" }
+  local lines = {}
   for _, k in ipairs(M.KEYS) do
     local lhs = lhs_text(k)
     lines[#lines + 1] = ("  %s%s   %s"):format(
@@ -213,8 +219,6 @@ function M.help_lines()
       k.desc
     )
   end
-  lines[#lines + 1] = ""
-  lines[#lines + 1] = " q / <Esc>  close this list"
   return lines
 end
 

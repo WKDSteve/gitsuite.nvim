@@ -1,66 +1,66 @@
 testing.nvim screen v1
 size: 120x30
-cursor: 3,5
+cursor: 4,5
 mode: n
 --- text
 01| tab 2 of 2
-02| <C╭──────────────────────────────────────────GitSuite Plugins Report Keys───────────────────────────────────────────╮
-03|plu│                                                                                                                 │
-04|   │ Plugins report keys                                                                                             │
-05|! b│                                                                                                                 │
-06|+ n│  <CR>      On a plugin: its detail. On a commit in the digest: its plugin's detail, cursor on the commit        │
-07|↑ u│  <BS>      Back to the overview                                                                                 │
-08|   │  D         Breaking digest: the breaking commits of every plugin in one list                                    │
-09|1 u│  s         Cycle the sort: breaking first, name, number of commits, time of the update                          │
-10|~  │  A         List the unchanged plugins too, or count them again                                                  │
-11|~  │  ]] / [[   Next / previous plugin's detail (in the overview's order)                                            │
-12|~  │  ]b / [b   Next / previous breaking commit not marked as seen                                                   │
-13|~  │  m         Mark the commit under the cursor as seen, or every new commit of the plugin under it; again: unmark  │
-14|git│  M         Mark every commit this view lists as seen                                                            │
-15|Mov│  o / K     Open in the browser: the commit, or on a plugin the compare page of its update; counts as seen       │
-16|~  │  go        Open the compare page of the plugin's update, also from a commit line                                │
-17|~  │  gy        Copy the URL `o` would open                                                                          │
-18|~  │  y / Y     Copy the short / full hash (on a plugin: the commit its update ended on)                             │
-19|~  │  L         lazygit in the plugin's clone (lazygit can change the clone; the report itself never does)           │
-20|~  │  S         The clone's git status and last five commits, read only                                              │
-21|~  │  C         The plugin's CHANGELOG, in the tab the report was opened from                                        │
-22|~  │  Q         The breaking commits into the quickfix list, opened in the tab the report was opened from            │
-23|~  │  F         Jump to a plugin or a commit by name (picker)                                                        │
-24|~  │  O         Menu of the actions for the line under the cursor                                                    │
-25|~  │  r         Read the clone under the cursor again (a failed one, say); for this tab only, nothing is stored      │
-26|~  │  R         Build a new report (same mode), store it and show it                                                 │
-27|~  │  p         Show or hide the preview (follows the cursor)                                                        │
-28|~  │  q         Close the report tab; the report stays, `:Git plugins` opens it again                                │
-29|git╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+02| <CR> open  │  D digest  │  s sort  │  ]b breaking  │  m seen  │  o browser  │  O actions  │  p preview  │  ? keys
+03|plu╭─────────────────────────────────GitSuite Plugins Report Keys · q / <Esc> close──────────────────────────────────╮
+04|   │  <CR>      On a plugin: its detail. On a commit in the digest: its plugin's detail, cursor on the commit        │
+05|! b│  <BS>      Back to the overview                                                                                 │
+06|+ n│  D         Breaking digest: the breaking commits of every plugin in one list                                    │
+07|↑ u│  s         Cycle the sort: breaking first, name, number of commits, time of the update                          │
+08|   │  A         List the unchanged plugins too, or count them again                                                  │
+09|1 u│  ]] / [[   Next / previous plugin's detail (in the overview's order)                                            │
+10|~  │  ]b / [b   Next / previous breaking commit not marked as seen                                                   │
+11|~  │  m         Mark the commit under the cursor as seen, or every new commit of the plugin under it; again: unmark  │
+12|~  │  M         Mark every commit this view lists as seen                                                            │
+13|~  │  o / K     Open in the browser: the commit, or on a plugin the compare page of its update; counts as seen       │
+14|git│  go        Open the compare page of the plugin's update, also from a commit line                                │
+15|Mov│  gy        Copy the URL `o` would open                                                                          │
+16|~  │  y / Y     Copy the short / full hash (on a plugin: the commit its update ended on)                             │
+17|~  │  L         lazygit in the plugin's clone (lazygit can change the clone; the report itself never does)           │
+18|~  │  S         The clone's git status and last five commits, read only                                              │
+19|~  │  C         The plugin's CHANGELOG, in the tab the report was opened from                                        │
+20|~  │  Q         The breaking commits into the quickfix list, opened in the tab the report was opened from            │
+21|~  │  F         Jump to a plugin or a commit by name (picker)                                                        │
+22|~  │  O         Menu of the actions for the line under the cursor                                                    │
+23|~  │  r         Read the clone under the cursor again (a failed one, say); for this tab only, nothing is stored      │
+24|~  │  R         Build a new report (same mode), store it and show it                                                 │
+25|~  │  p         Show or hide the preview (follows the cursor)                                                        │
+26|~  │  q         Close the report tab; the report stays, `:Git plugins` opens it again                                │
+27|~  │  ?         List every one of these keys                                                                         │
+28|~  ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+29|gitsuite://plugins/preview [-]
 30|
 --- attrs
 01|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-02|bbbcccccccccccccccccccccccccccccccccccccccccccddddddddddddddddddddddddddddccccccccccccccccccccccccccccccccccccccccccccbb
-03|dddccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-04|   ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-05|eeecccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccff
-06|gggccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-07|gggccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-08|   ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-09|hhhccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-10|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-11|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-12|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-13|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-14|aaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccaa
-15|   ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-16|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-17|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-18|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-19|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-20|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-21|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-22|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-23|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-24|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-25|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-26|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-27|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-28|iiicccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccii
-29|aaacccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccaa
+02|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+03|cccddddddddddddddddddddddddddddddddddccccccccccccccccccccccccccccccccccccccccccccccddddddddddddddddddddddddddddddddddd
+04|   ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+05|eeedddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddff
+06|gggddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+07|gggddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+08|   ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+09|hhhddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+10|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+11|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+12|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+13|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+14|aaadddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddaa
+15|   ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+16|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+17|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+18|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+19|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+20|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+21|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+22|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+23|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+24|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+25|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+26|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+27|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+28|iiidddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddii
+29|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 30|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj

@@ -314,6 +314,43 @@ describe("gitsuite.features.plugins.report_ui window", function()
     end
   end)
 
+  it("the ? list fits a screen of 30 rows and less; its title says how to close it", function()
+    local rows = vim.o.lines
+    local function help_float()
+      for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if vim.api.nvim_win_get_config(w).relative ~= "" then return w end
+      end
+    end
+    local ok, err = pcall(function()
+      ui.open(report)
+      local count = #keys.help_lines()
+      -- 30 rows: the size the report-tab sheet shows (a float there is at most 26 rows high).
+      -- 28: the lowest that still fits. 24 and 20: the list scrolls, the title stays.
+      for _, h in ipairs({ 30, 28, 24, 20 }) do
+        vim.o.lines = h
+        vim.api.nvim_set_current_win(S().list_win)
+        press("?")
+        local w = help_float()
+        assert.is_not_nil(w, "no ? list at " .. h .. " rows")
+        local cfg = vim.api.nvim_win_get_config(w)
+        local title = table.concat(vim.tbl_map(function(c)
+          return c[1]
+        end, cfg.title or {}))
+        assert.truthy(title:find("q / <Esc>", 1, true), h .. " rows: " .. title)
+        local height = vim.api.nvim_win_get_height(w)
+        if h >= 28 then
+          assert.is_true(
+            height >= count,
+            ("%d rows: %d of %d lines shown"):format(h, height, count)
+          )
+        end
+        vim.api.nvim_win_close(w, true)
+      end
+    end)
+    vim.o.lines = rows
+    assert(ok, err)
+  end)
+
   it("binds exactly the keys of the table", function()
     ui.open(report)
     local bound = {}

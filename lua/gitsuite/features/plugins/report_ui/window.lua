@@ -704,7 +704,7 @@ end
 ACTIONS.help = function()
   require("ui.kit").viewer({
     lines = keys.help_lines(),
-    title = "GitSuite Plugins Report Keys",
+    title = keys.HELP_TITLE,
     filetype = "gitsuite-help",
   })
 end

@@ -171,7 +171,9 @@ default). Set on the report's list buffer only, declared in one table in
 which also makes the `winbar` legend and the `?` list; a spec compares this
 table with it, row by row. Some letters mean something else here than on the
 dashboard (`p` is the preview, not push; `S`, `L` and `y` mean the same kind
-of thing, for the clone under the cursor).
+of thing, for the clone under the cursor). The `?` list holds one line per key
+and fits a screen of 28 rows without scrolling; its title says that `q` or
+`<Esc>` closes it.
 
 | Key | Mode | Action |
 | --- | --- | --- |
