@@ -43,6 +43,9 @@ pull over every repository in `dir`/`dashboard.base_dir`, no UI, one
 summary notification when it's done — the same pair the dashboard's own
 `gu` key runs without leaving the panel.
 
+Without an editor at all, `scripts/gitsuite.lua status --dir=<dir>` prints the
+same rows as JSON — see [cli.md](cli.md).
+
 ### `plugins` — the history of the clones a plugin manager installed
 
 ```vim

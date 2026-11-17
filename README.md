@@ -67,6 +67,7 @@ question each page answers.
 - [What you get with the defaults](docs/what-you-get.md) — the handful of things that matter on day one.
 - [All options](docs/configuration.md) — every `setup()` option and its default.
 - [Commands](docs/commands.md) / [Bindings cheatsheet](docs/BINDINGS.md)
+- [Command line without the editor](docs/cli.md) — status, log, blame and the breaking check as JSON for scripts and hooks.
 
 **The Rest**
 
