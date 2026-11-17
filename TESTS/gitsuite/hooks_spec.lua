@@ -224,7 +224,11 @@ describe("gitsuite.features.hooks", function()
         write_file(repo .. "/.husky/_/.gitignore", "*\n")
         git(repo, "config", "--local", "core.hooksPath", ".husky/_")
 
-        assert.equals(repo .. "/.husky", hooks.inspect(repo).versioned_dir)
+        -- realpath: on macOS the temp folder is under /var, which git reports as /private/var.
+        assert.equals(
+          vim.uv.fs_realpath(repo .. "/.husky"),
+          vim.uv.fs_realpath(hooks.inspect(repo).versioned_dir)
+        )
         local res = by_id(hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true }))
         assert.equals(
           "installed",
