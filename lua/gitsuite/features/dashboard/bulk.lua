@@ -24,6 +24,7 @@ local notify = require("gitsuite.util.notify").notify
 ---@field on_finish fun(results: GitSuiteBulkResult[], ended: GitSuiteBulkEnd): nil Results in `targets` order; a target never started has none
 ---@field handle? table Progress handle (`on_cancel`, `update`, `finish`), when one could be made
 ---@field open? boolean The queue stays open for `push` until `close`: targets arrive while it runs (fetch on open, fed by the scan)
+---@field open_limit? integer How many may run at once while an `open` queue is still open (its feeder still busy itself); `limit` once it is closed
 ---@field stop_after_failures? integer Stop starting further targets once this many have finished and every one of them failed (no network: one timeout per repository is a long wait for nothing)
 
 ---What `M.run` hands back for an `open` queue.
@@ -206,7 +207,8 @@ function M.run(opts)
   -- last slot is given back.
   pump = function()
     if finished then return end
-    while running < opts.limit and not cancelled and next_pos <= #targets do
+    local limit = (not closed and opts.open_limit) or opts.limit
+    while running < limit and not cancelled and next_pos <= #targets do
       local target = targets[next_pos]
       -- Row actions only start on settled rows and this one is still queued, so
       -- the lock is normally free; should anything else hold it, the queue waits

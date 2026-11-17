@@ -159,7 +159,9 @@ dashboard opens with is queued for a fetch as soon as its row is read, while
 the scan still reads the rest, and its row is read again and redrawn once its
 own fetch is through. It is the same queue `gf` runs — `fetch_jobs` at once,
 the rows show `· fetch queued` / `⟳ fetch...`, the title counts it, one summary
-at the end — just fed by the scan and without the question. Off by default:
+at the end — just fed by the scan and without the question. While the scan
+itself still runs (up to eight status reads at once) only one fetch runs, so
+the two together do not pile up processes; `fetch_jobs` once the scan is through. Off by default:
 opening a panel should not reach the network unasked. What it does not do:
 
 - only interactive outputs fetch (`popup`, `buffer`, `split`, `vsplit`), never

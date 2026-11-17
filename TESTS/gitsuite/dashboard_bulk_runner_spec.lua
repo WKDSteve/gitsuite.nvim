@@ -27,7 +27,7 @@ describe("gitsuite.features.dashboard.bulk", function()
   ---`opts.reread`, `opts.on_reread` and `opts.redraw` replace the harmless default ones.
   ---`opts.open` and `opts.stop_after_failures` go to `bulk.run` as they are; an open queue's feeder
   ---lands in `run.feeder`, how the walk ended in `run.ended`.
-  ---@param opts? { limit?: integer, action?: function, handle?: table, hold_rereads?: boolean, reread?: function, on_reread?: function, redraw?: function, open?: boolean, stop_after_failures?: integer }
+  ---@param opts? { limit?: integer, action?: function, handle?: table, hold_rereads?: boolean, reread?: function, on_reread?: function, redraw?: function, open?: boolean, open_limit?: integer, stop_after_failures?: integer }
   local function start(names, opts)
     opts = opts or {}
     run = { started = {}, waiting = {}, rereads = {}, stored = {}, redraws = 0 }
@@ -39,6 +39,7 @@ describe("gitsuite.features.dashboard.bulk", function()
       verb = "fetch",
       targets = targets,
       open = opts.open,
+      open_limit = opts.open_limit,
       stop_after_failures = opts.stop_after_failures,
       limit = opts.limit or 1,
       action = opts.action or function(path, on_done)
@@ -362,6 +363,16 @@ describe("gitsuite.features.dashboard.bulk", function()
       assert.same({ "a", "b", "c", "d" }, names_of(run.results))
       assert.same({ cancelled = false, stopped = false }, run.ended)
       assert.is_nil(state.bulk_verb())
+    end)
+
+    it("runs open_limit at once while open, limit once closed", function()
+      start({}, { open = true, open_limit = 1, limit = 3 })
+      for _, name in ipairs({ "a", "b", "c", "d" }) do
+        run.feeder.push(target(name))
+      end
+      assert.same({ "/a" }, run.started, "one while the feeder is busy")
+      run.feeder.close()
+      assert.same({ "/a", "/b", "/c" }, run.started, "the full limit once it is closed")
     end)
 
     it("ends at once when closed with nothing queued", function()

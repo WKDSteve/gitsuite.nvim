@@ -2461,10 +2461,16 @@ end
 ---stops: one is a broken remote, three with nothing through is no network.
 local FETCH_ON_OPEN_STOP_AFTER = 3
 
+---Fetches at once while the scan still feeds the queue: the scan itself runs up to eight
+---status reads (two git processes each) at the same time, and a fetch is a git plus its
+---transport. Once the scan is through, `dashboard.fetch_jobs` as for `gf`.
+local FETCH_ON_OPEN_WHILE_SCANNING = 1
+
 ---Starts fetch on open (`dashboard.fetch_on_open`): an open fetch queue the scan
 ---feeds, one repository at a time as its row is read, so fetching starts while
 ---the rest of the page is still being read instead of after a separate `gf`.
----At most `dashboard.fetch_jobs` run at once, like `gf`; every fetched row is
+---One at a time while the scan runs (it has its own eight reads going), then at
+---most `dashboard.fetch_jobs` at once, like `gf`; every fetched row is
 ---read again and redrawn by itself -- in the live popup while the scan runs,
 ---in the finished dashboard after it (and `M.show`'s `reread_since` puts a row
 ---fetched before the table was shown back into it).
@@ -2483,6 +2489,7 @@ function M.fetch_pipeline()
     stop_after_failures = FETCH_ON_OPEN_STOP_AFTER,
     action = repo_actions.fetch,
     limit = cfg.fetch_jobs,
+    open_limit = math.min(FETCH_ON_OPEN_WHILE_SCANNING, cfg.fetch_jobs),
     reread = dashboard_one,
     on_reread = function(new_record)
       if not new_record then return end
