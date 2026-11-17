@@ -1,10 +1,12 @@
 -- Live check of `dashboard.fetch_on_open` (task gitsuite.nvim/dashboard-scan-plus-fetch-pipeline): `:Git dashboard`
--- fetches the page it opens with, each repository as soon as its row is read, `fetch_jobs` at once, and redraws
--- every row once its own fetch is through. Six clones with gated local remotes (`_gated_remotes.lua`, no network):
--- the sheet decides when each fetch may finish.
--- Steps: open (no question; two fetch, four queued), one gate opens (that row shows its new commit, a queued one
--- starts), all open (every row settles, one summary). Then the remotes disappear (what no network looks like to
--- the queue): opened again with one fetch at a time, it stops after the first three failures and says so once.
+-- fetches the page it opens with, each repository as soon as its row is read (one at a time while the scan runs,
+-- then `fetch_jobs` at once), and redraws every row once its own fetch is through. Six clones with gated local
+-- remotes (`_gated_remotes.lua`, no network): the sheet decides when each fetch may finish. The queue is in the
+-- order the scan finished reading the rows, which differs between systems: no step names which rows fetch first.
+-- Steps: open (no question; two fetch, four queued), the gate of one running fetch opens (its row shows its new
+-- commit, a queued one starts), all open (every row settles, one summary). Then the remotes disappear (what no
+-- network looks like to the queue): opened again with one fetch at a time, it stops after the first three failures
+-- and says so once.
 -- Sabotage: without `feeder.push` in features/dashboard/init.lua nothing fetches and the first wait is red.
 return {
   id = "gitsuite.dashboard-fetch-on-open",
@@ -53,12 +55,6 @@ return {
       note = "the dashboard is up and already fetching: two run (fetch_jobs), four are queued",
     },
     { expect = [[not _G.asking("Fetch")]], note = "without a question" },
-    {
-      expect = [[_G.row("alpha"):find("fetch...", 1, true) and _G.row("bravo"):find("fetch...", 1, true)]],
-      note = "in row order",
-    },
-    { lua = 'vim.cmd("echo")' },
-    { screen = "fetching", masks = { "%d+y " } },
 
     { keys = "gf", note = "gf while the fetch on open runs" },
     {
@@ -66,12 +62,18 @@ return {
       note = "is refused at once, like during any batch",
     },
 
-    { lua = '_G.release("alpha")', note = "alpha's fetch may finish" },
     {
-      wait = [[_G.row("alpha"):find("↓1", 1, true) and not _G.row("alpha"):find("fetch", 1, true)
-        and _G.row("charlie"):find("fetch...", 1, true) and _G.count("· fetch queued") == 3]],
+      lua = [[for _, name in ipairs(_G.NAMES) do
+        if _G.row(name):find("fetch...", 1, true) then _G.first = name; break end
+      end
+      _G.release(_G.first)]],
+      note = "one of the two running fetches may finish (the queue is in the order the scan read the rows)",
+    },
+    {
+      wait = [[_G.row(_G.first):find("↓1", 1, true) and not _G.row(_G.first):find("fetch", 1, true)
+        and _G.count("⟳ fetch...") == 2 and _G.count("· fetch queued") == 3]],
       timeout = 20000,
-      note = "alpha's row is redrawn by itself with its new commit (↓1); charlie leaves the queue",
+      note = "its row is redrawn by itself with its new commit (↓1); the next one leaves the queue",
     },
     { expect = [[_G.title():find("fetch 1/6", 1, true) ~= nil]], note = "the title counts on" },
 
@@ -117,7 +119,7 @@ return {
     { wait = [[_G.dwin() == nil]], note = "the dashboard is gone" },
   },
   judge = {
-    "fetching: the rows read clearly as being fetched right after opening (· fetch queued / ⟳ fetch...), the title counts it",
+    "settled: every row shows what its fetch brought (↓1) without a gf, and the title no longer counts a batch",
   },
   manual = {
     "With your real repositories over the network and dashboard.fetch_on_open = true: :Git dashboard opens at once, rows fill in and then show their fetch, each settles by itself; no Falcon/EDR alert with fetch_jobs = 4",
