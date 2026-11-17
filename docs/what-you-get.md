@@ -58,7 +58,8 @@ The handful of things worth knowing before reading anything else.
   last-commit age) across a whole folder of clones, or a configured set
   of named pages (`dashboard.groups`) you flip between with
   `<C-l>`/`<C-h>` — with push/pull/fetch per row, per marked set, or for
-  the whole page. See [configuration.md](configuration.md) for
+  the whole page; with `dashboard.fetch_on_open` it fetches the page while
+  it opens, row by row. See [configuration.md](configuration.md#dashboard) for
   `dashboard.*` and [BINDINGS.md](BINDINGS.md#dashboard-keys-component-local)
   for its own keys.
 

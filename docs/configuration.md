@@ -108,6 +108,7 @@ dashboard = {
   groups = {},       -- additional named pages, see below
   pull_scope = "behind", -- gP's focused default: "behind" (only repos behind upstream) or "all"
   fetch_jobs = 4,    -- gf, gS and gs work on this many repositories at once (1 to 16); gp and gP stay one by one
+  fetch_on_open = false, -- :Git dashboard fetches the page it opens with, row by row as the scan reads them
   context_menu = true, -- <RightMouse> opens the dashboard's own menu; false disables the binding only
 },
 ```
@@ -151,6 +152,28 @@ fetch recorded yet (no non-empty `FETCH_HEAD`), has no trustworthy behind
 count: the prompt names it, and "Only behind" skips it — fetch first (`gf`)
 or pick "All". A repository that already shows commits behind is pulled by
 "Only behind" either way.
+
+`fetch_on_open` turns the `gf` that most `:Git dashboard` openings are
+followed by into part of the opening itself: every repository of the page the
+dashboard opens with is queued for a fetch as soon as its row is read, while
+the scan still reads the rest, and its row is read again and redrawn once its
+own fetch is through. It is the same queue `gf` runs — `fetch_jobs` at once,
+the rows show `· fetch queued` / `⟳ fetch...`, the title counts it, one summary
+at the end — just fed by the scan and without the question. Off by default:
+opening a panel should not reach the network unasked. What it does not do:
+
+- only interactive outputs fetch (`popup`, `buffer`, `split`, `vsplit`), never
+  `--out=clipboard` or `--out=path`, and never `<C-l>`/`<C-h>` or `R`;
+- a dashboard opened again while its fetch on open (or any batch) still runs
+  shows that one and does not queue a second;
+- when the first three fetches all fail with none through (no network, no
+  access), it stops instead of waiting out one timeout per repository, and
+  says so once. Each fetch never prompts for credentials (`GIT_TERMINAL_PROMPT=0`)
+  and gives up after `lib.nvim.git`'s network timeout.
+
+While it runs, `gf`/`gp`/... and the page keys refuse like during any batch;
+cancel it through the progress indicator (it stops queueing, fetches already
+running finish).
 
 `context_menu` controls `<RightMouse>` on the dashboard buffer: on by
 default, it opens a menu of the same row/batch actions the keys already run
@@ -210,7 +233,7 @@ dropped with a `setup()` issue and the default applies: `log_limit` and
 (`math.huge` is not "no limit").
 
 The `fetch_*` options only matter for `:Git plugins report --mode=pending
---fetch` — gitsuite never fetches without that flag. It runs one `git fetch
+--fetch` — `:Git plugins` never fetches without that flag. It runs one `git fetch
 --all --prune` per clone (only remote-tracking refs and `FETCH_HEAD` move; HEAD
 and the work tree stay), `fetch_jobs` at a time (a machine with a virus scanner
 is happier with few), each killed after `fetch_timeout_ms` together with its

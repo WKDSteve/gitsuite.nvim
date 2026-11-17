@@ -65,6 +65,11 @@ local DEFAULTS = {
     -- `gf` (fetch the whole page) and the syncs `gS`/`gs` run this many at once. Fetch
     -- only reads the remote; `gp` and `gP` stay one after another.
     fetch_jobs = 4,
+    -- `:Git dashboard` fetches every repository of the page it opens with, each one
+    -- as soon as its row is read (`fetch_jobs` at once), and redraws the row once
+    -- its fetch is through -- the `gf` most opens are followed by, without asking.
+    -- Off by default: opening a panel should not reach the network unasked.
+    fetch_on_open = false,
     -- `<RightMouse>` on the dashboard opens a menu of the same row/whole-page
     -- actions the keys already run (lib.nvim.contextmenu.bind_buffer),
     -- instead of ui.nvim's global one. Off disables the binding only --

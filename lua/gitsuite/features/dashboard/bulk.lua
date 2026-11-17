@@ -21,8 +21,20 @@ local notify = require("gitsuite.util.notify").notify
 ---@field reread fun(path: string, on_record: fun(record: RepoDashboardRecord|nil)): nil
 ---@field on_reread fun(record: RepoDashboardRecord|nil): nil Stores a re-read row
 ---@field redraw fun(): nil Draws the table; called after every phase change
----@field on_finish fun(results: GitSuiteBulkResult[]): nil Results in `targets` order; a target never started has none
+---@field on_finish fun(results: GitSuiteBulkResult[], ended: GitSuiteBulkEnd): nil Results in `targets` order; a target never started has none
 ---@field handle? table Progress handle (`on_cancel`, `update`, `finish`), when one could be made
+---@field open? boolean The queue stays open for `push` until `close`: targets arrive while it runs (fetch on open, fed by the scan)
+---@field stop_after_failures? integer Stop starting further targets once this many have finished and every one of them failed (no network: one timeout per repository is a long wait for nothing)
+
+---What `M.run` hands back for an `open` queue.
+---@class GitSuiteBulkFeeder
+---@field push fun(target: GitSuiteBulkTarget): boolean Queues one more target; false once the queue is closed, stopped or finished, or when it holds that path already
+---@field close fun(): nil No more targets: the walk ends once the queued ones are through
+
+---How the walk ended, the second argument of `on_finish`.
+---@class GitSuiteBulkEnd
+---@field cancelled boolean Through the progress handle
+---@field stopped boolean By `stop_after_failures`
 
 ---@class GitSuiteDashboardBulk
 local M = {}
@@ -40,17 +52,29 @@ local LOCK_RETRY_MS = 100
 ---A callback that raises (a redraw, a re-read, the progress handle) is reported
 ---once and the walk goes on: a batch that never ends refuses every later batch,
 ---page switch and re-sort until Neovim restarts, which is worse than a stale row.
+---
+---An `open` queue starts with whatever `targets` holds (often nothing) and takes
+---more through the returned feeder's `push`; it ends only after `close` and once
+---the last queued target is through. Every pushed target is `pending` at once,
+---like the up-front ones.
 ---@param opts GitSuiteBulkOpts
----@return nil
+---@return GitSuiteBulkFeeder|nil feeder For an `open` queue; nil otherwise
 function M.run(opts)
-  local verb, targets, handle = opts.verb, opts.targets, opts.handle
-  local total = #targets
-
+  local verb, handle = opts.verb, opts.handle
+  -- A copy: an open queue appends to it, and the caller's list is not this walk's to grow.
+  ---@type GitSuiteBulkTarget[]
+  local targets = {}
+  ---@type table<string, boolean>
+  local queued = {}
   ---@type string[]
   local paths = {}
-  for i, target in ipairs(targets) do
+  for i, target in ipairs(opts.targets) do
+    targets[i] = target
     paths[i] = target.path
+    queued[target.path] = true
   end
+  -- Closed from the start unless open: then the walk ends once `targets` is through.
+  local closed = not opts.open
 
   local warned = false
   local function warn_once(err)
@@ -81,7 +105,7 @@ function M.run(opts)
   local generation = repo_state.begin_bulk(verb, paths)
   redraw()
 
-  local cancelled = false
+  local cancelled, stopped = false, false
   if handle then guarded(handle.on_cancel, handle, function()
     cancelled = true
   end) end
@@ -90,7 +114,7 @@ function M.run(opts)
   -- row order whichever of the parallel ones finished first.
   ---@type table<integer, GitSuiteBulkResult>
   local results = {}
-  local succeeded, completed = 0, 0
+  local succeeded, completed, failed = 0, 0, 0
   local next_pos, running, finished = 1, 0, false
 
   local function finish()
@@ -101,14 +125,18 @@ function M.run(opts)
     redraw()
 
     if handle then
-      guarded(handle.finish, handle, ("%s: %d of %d repositories"):format(verb, succeeded, total))
+      guarded(
+        handle.finish,
+        handle,
+        ("%s: %d of %d repositories"):format(verb, succeeded, #targets)
+      )
     end
     ---@type GitSuiteBulkResult[]
     local ordered = {}
-    for pos = 1, total do
+    for pos = 1, #targets do
       if results[pos] then ordered[#ordered + 1] = results[pos] end
     end
-    opts.on_finish(ordered)
+    opts.on_finish(ordered, { cancelled = cancelled, stopped = stopped })
   end
 
   local pump
@@ -117,13 +145,17 @@ function M.run(opts)
     repo_state.set_phase(target.path, "fetching", generation)
     redraw()
     if handle then
-      guarded(handle.update, handle, { text = target.name, current = completed, total = total })
+      guarded(handle.update, handle, { text = target.name, current = completed, total = #targets })
     end
 
     local function on_done(ok, err, detail, skipped)
       vim.schedule(function()
         repo_state.unlock(target.path)
-        if ok then succeeded = succeeded + 1 end
+        if ok then
+          succeeded = succeeded + 1
+        else
+          failed = failed + 1
+        end
         results[pos] = {
           name = target.name,
           ok = ok and true or false,
@@ -149,6 +181,12 @@ function M.run(opts)
             redraw()
             running = running - 1
             completed = completed + 1
+            -- Nothing but failures so far: most likely no network (or no access at
+            -- all), and every further target would wait out its own timeout too.
+            local limit = opts.stop_after_failures
+            if limit and not cancelled and succeeded == 0 and failed >= limit then
+              cancelled, stopped = true, true
+            end
             pump()
           end)
         end
@@ -168,7 +206,7 @@ function M.run(opts)
   -- last slot is given back.
   pump = function()
     if finished then return end
-    while running < opts.limit and not cancelled and next_pos <= total do
+    while running < opts.limit and not cancelled and next_pos <= #targets do
       local target = targets[next_pos]
       -- Row actions only start on settled rows and this one is still queued, so
       -- the lock is normally free; should anything else hold it, the queue waits
@@ -182,13 +220,32 @@ function M.run(opts)
       running = running + 1
       launch(target, pos)
     end
-    if running == 0 and (cancelled or next_pos > total) then
+    if running == 0 and (cancelled or (closed and next_pos > #targets)) then
       finished = true
       finish()
     end
   end
 
   pump()
+  if not opts.open then return nil end
+
+  ---@type GitSuiteBulkFeeder
+  return {
+    push = function(target)
+      if closed or cancelled or finished or queued[target.path] then return false end
+      queued[target.path] = true
+      targets[#targets + 1] = target
+      repo_state.set_phase(target.path, "pending", generation)
+      redraw()
+      pump()
+      return true
+    end,
+    close = function()
+      if closed then return end
+      closed = true
+      pump()
+    end,
+  }
 end
 
 return M

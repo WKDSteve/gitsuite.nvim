@@ -25,7 +25,9 @@ describe("gitsuite.features.dashboard.bulk", function()
   ---once unless `opts.hold_rereads`.
   ---@param names string[]
   ---`opts.reread`, `opts.on_reread` and `opts.redraw` replace the harmless default ones.
-  ---@param opts? { limit?: integer, action?: function, handle?: table, hold_rereads?: boolean, reread?: function, on_reread?: function, redraw?: function }
+  ---`opts.open` and `opts.stop_after_failures` go to `bulk.run` as they are; an open queue's feeder
+  ---lands in `run.feeder`, how the walk ended in `run.ended`.
+  ---@param opts? { limit?: integer, action?: function, handle?: table, hold_rereads?: boolean, reread?: function, on_reread?: function, redraw?: function, open?: boolean, stop_after_failures?: integer }
   local function start(names, opts)
     opts = opts or {}
     run = { started = {}, waiting = {}, rereads = {}, stored = {}, redraws = 0 }
@@ -33,9 +35,11 @@ describe("gitsuite.features.dashboard.bulk", function()
     for i, name in ipairs(names) do
       targets[i] = { path = "/" .. name, name = name }
     end
-    bulk.run({
+    run.feeder = bulk.run({
       verb = "fetch",
       targets = targets,
+      open = opts.open,
+      stop_after_failures = opts.stop_after_failures,
       limit = opts.limit or 1,
       action = opts.action or function(path, on_done)
         run.started[#run.started + 1] = path
@@ -55,8 +59,9 @@ describe("gitsuite.features.dashboard.bulk", function()
         run.redraws = run.redraws + 1
       end,
       handle = opts.handle,
-      on_finish = function(results)
+      on_finish = function(results, ended)
         run.results = results
+        run.ended = ended
       end,
     })
   end
@@ -311,6 +316,129 @@ describe("gitsuite.features.dashboard.bulk", function()
       start({ "a", "b" }, { handle = { on_cancel = boom, update = boom, finish = boom } })
       walk_to_the_end()
       assert.equals(1, #warnings, table.concat(warnings, "\n"))
+    end)
+  end)
+
+  describe("an open queue (fetch on open, fed by the scan)", function()
+    local function target(name)
+      return { path = "/" .. name, name = name }
+    end
+
+    it("hands back a feeder only when open", function()
+      start({ "a" })
+      assert.is_nil(run.feeder)
+      start({}, { open = true })
+      assert.is_function(run.feeder.push)
+    end)
+
+    it("runs pushed targets as they come, and does not end before close", function()
+      start({}, { open = true, limit = 2 })
+      assert.equals("fetch", state.bulk_verb())
+      assert.is_true(run.feeder.push(target("a")))
+      assert.same({ "/a" }, run.started)
+      complete("/a")
+      until_(function()
+        return state.phase("/a") == "done"
+      end)
+      -- through with everything queued so far, but still open: the scan may push more
+      assert.is_nil(run.results)
+      assert.equals("fetch", state.bulk_verb())
+      assert.is_true(run.feeder.push(target("b")))
+      assert.is_true(run.feeder.push(target("c")))
+      assert.is_true(run.feeder.push(target("d")))
+      assert.same({ "/a", "/b", "/c" }, run.started)
+      assert.equals("pending", state.phase("/d"))
+      run.feeder.close()
+      assert.is_false(run.feeder.push(target("e")), "closed: nothing more is taken")
+      complete("/b")
+      complete("/c")
+      until_(function()
+        return run.waiting["/d"] ~= nil
+      end)
+      complete("/d")
+      until_(function()
+        return run.results ~= nil
+      end)
+      assert.same({ "a", "b", "c", "d" }, names_of(run.results))
+      assert.same({ cancelled = false, stopped = false }, run.ended)
+      assert.is_nil(state.bulk_verb())
+    end)
+
+    it("ends at once when closed with nothing queued", function()
+      start({}, { open = true })
+      run.feeder.close()
+      assert.same({}, run.results)
+      assert.is_nil(state.bulk_verb())
+    end)
+
+    it("takes a path only once", function()
+      start({}, { open = true })
+      assert.is_true(run.feeder.push(target("a")))
+      assert.is_false(run.feeder.push(target("a")))
+    end)
+
+    it("a target pushed while another holds its lock waits for it", function()
+      state.try_lock("/a", "pull")
+      start({}, { open = true })
+      run.feeder.push(target("a"))
+      assert.same({}, run.started)
+      state.unlock("/a")
+      until_(function()
+        return #run.started == 1
+      end)
+    end)
+  end)
+
+  describe("stop_after_failures", function()
+    it("stops starting further targets when the first ones all fail", function()
+      start({ "a", "b", "c", "d", "e" }, { limit = 2, stop_after_failures = 2 })
+      complete("/a", false)
+      until_(function()
+        return run.waiting["/c"] ~= nil
+      end)
+      complete("/b", false)
+      -- the second failure stops the queue; c still runs to its end
+      until_(function()
+        return state.phase("/b") == "failed"
+      end)
+      assert.is_nil(run.waiting["/d"])
+      complete("/c", false)
+      until_(function()
+        return run.results ~= nil
+      end)
+      assert.same({ "a", "b", "c" }, names_of(run.results))
+      assert.same({ cancelled = true, stopped = true }, run.ended)
+      assert.is_nil(state.bulk_verb())
+    end)
+
+    it("keeps going once one went through", function()
+      start({ "a", "b", "c", "d" }, { stop_after_failures = 2 })
+      for _, path in ipairs({ "/a", "/b", "/c", "/d" }) do
+        until_(function()
+          return run.waiting[path] ~= nil
+        end)
+        complete(path, path == "/a")
+      end
+      until_(function()
+        return run.results ~= nil
+      end)
+      assert.equals(4, #run.results)
+      assert.is_false(run.ended.stopped)
+    end)
+
+    it("refuses pushes once stopped", function()
+      start({}, { open = true, stop_after_failures = 1 })
+      run.feeder.push({ path = "/a", name = "a" })
+      complete("/a", false)
+      until_(function()
+        return state.phase("/a") ~= "fetching"
+      end)
+      assert.is_false(run.feeder.push({ path = "/b", name = "b" }))
+      run.feeder.close()
+      until_(function()
+        return run.results ~= nil
+      end)
+      assert.is_true(run.ended.stopped)
     end)
   end)
 end)

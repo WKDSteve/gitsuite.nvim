@@ -65,6 +65,11 @@ end
 ---directory-wide read this used to wait on in full before showing anything
 ---at all can run to several seconds on a few dozen clones. Every other
 ---output mode is unaffected -- `view.live_begin` is itself a no-op for them.
+---
+---With `dashboard.fetch_on_open`, an interactive output also fetches the page
+---it opens with: every repository whose row the scan has read goes into an open
+---fetch queue (`view.fetch_pipeline`) right away, and the queue is closed once
+---the scan is through. So fetching overlaps the scan instead of waiting for it.
 ---@param dir string|nil
 ---@param output GitSuiteDashboardOutputMode|nil
 ---@param out_path string|nil
@@ -77,7 +82,33 @@ function M.show(dir, output, out_path)
   -- while this scan runs; those re-reads are newer than what it reads.
   local reread_since = view.reread_mark()
 
+  local mode = output or "popup"
+  local interactive = mode == "popup" or mode == "buffer" or mode == "split" or mode == "vsplit"
+  ---@type GitSuiteBulkFeeder|nil
+  local feeder
+  if interactive and config.get().dashboard.fetch_on_open then feeder = view.fetch_pipeline() end
+
+  ---@type GitSuiteDashboardScanStream|nil
+  local stream
+  if live or feeder then
+    stream = {
+      on_discover = live and view.live_discover or nil,
+      on_record = function(path, record, err)
+        if live then view.live_record(path, record, err) end
+        -- A repository that could not be read is left out: its fetch would fail
+        -- the same way, and count towards stopping the queue for no network.
+        if feeder and record then
+          local ok, push_err = pcall(feeder.push, { path = path, name = record.name })
+          if not ok then notify("fetch on open: " .. tostring(push_err), vim.log.levels.WARN) end
+        end
+      end,
+    }
+  end
+
   scan_page(pages[1], dir, function(records, errors)
+    -- Closed first: whatever happens below, a queue left open would hold the
+    -- batch (and refuse every `gf` and page switch) until Neovim restarts.
+    if feeder then feeder.close() end
     if #records > 0 or #pages > 1 then
       view.show(records, {
         output = output,
@@ -103,7 +134,7 @@ function M.show(dir, output, out_path)
         vim.log.levels.WARN
       )
     end
-  end, live and { on_discover = view.live_discover, on_record = view.live_record } or nil)
+  end, stream)
 end
 
 ---Updates every repository found in the resolved base directory: fetch,

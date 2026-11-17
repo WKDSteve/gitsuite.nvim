@@ -227,6 +227,7 @@ local KNOWN = {
     },
     pull_scope = { ok = is_pull_scope, expect = '"behind" or "all"' },
     fetch_jobs = { ok = int_in(16), expect = "a whole number from 1 to 16" },
+    fetch_on_open = { ok = is_boolean, expect = "a boolean" },
     context_menu = { ok = is_boolean, expect = "a boolean" },
   },
   plugins = {

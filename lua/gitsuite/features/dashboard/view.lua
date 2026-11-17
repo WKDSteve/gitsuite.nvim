@@ -2457,6 +2457,66 @@ local function show_path(lines, path)
   end
 end
 
+---How many fetches in a row may fail, with none through, before fetch on open
+---stops: one is a broken remote, three with nothing through is no network.
+local FETCH_ON_OPEN_STOP_AFTER = 3
+
+---Starts fetch on open (`dashboard.fetch_on_open`): an open fetch queue the scan
+---feeds, one repository at a time as its row is read, so fetching starts while
+---the rest of the page is still being read instead of after a separate `gf`.
+---At most `dashboard.fetch_jobs` run at once, like `gf`; every fetched row is
+---read again and redrawn by itself -- in the live popup while the scan runs,
+---in the finished dashboard after it (and `M.show`'s `reread_since` puts a row
+---fetched before the table was shown back into it).
+---
+---Not started while a batch or a page load runs: a dashboard opened again
+---during its own fetch on open shows that one, and does not queue a second.
+---Stops early when the first few fetches all fail (no network), says so once.
+---@return GitSuiteBulkFeeder|nil feeder `push` each scanned repository, `close` once the scan is through; nil when nothing was started
+function M.fetch_pipeline()
+  if repo_state.bulk_verb() or _page_switching then return nil end
+  local cfg = require("gitsuite.config").get().dashboard
+  return bulk.run({
+    verb = "fetch",
+    targets = {},
+    open = true,
+    stop_after_failures = FETCH_ON_OPEN_STOP_AFTER,
+    action = repo_actions.fetch,
+    limit = cfg.fetch_jobs,
+    reread = dashboard_one,
+    on_reread = function(new_record)
+      if not new_record then return end
+      _store_record(_view and _view.records or {}, new_record)
+      if _live and _live.rows[new_record.path] then _live.rows[new_record.path] = new_record end
+    end,
+    redraw = function()
+      if _live then
+        _live_redraw()
+      elseif _view then
+        _draw(_view.bufnr, _view.records)
+      end
+    end,
+    handle = progress.create("fetch on open", 0),
+    on_finish = function(results, ended)
+      if #results == 0 then return end
+      local message, any_failed = bulk_report.format("fetch", results, #results)
+      if ended.stopped then
+        notify(
+          ("fetch on open stopped: the first %d fetches failed (no network?)\n\n%s"):format(
+            #results,
+            message
+          ),
+          vim.log.levels.WARN
+        )
+      elseif any_failed then
+        notify(message, vim.log.levels.WARN)
+      else
+        notify_success(message)
+      end
+    end,
+  })
+end
+
 ---Marks the start of a scan: hand the value to `M.show` as `reread_since`, and
 ---every row re-read after this point (a batch's or a row action's, landing
 ---while the scan runs) replaces what the scan read of that repository.
