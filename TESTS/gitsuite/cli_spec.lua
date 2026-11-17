@@ -31,13 +31,14 @@ describe("gitsuite command line (scripts/gitsuite.lua)", function()
   ---@return integer code
   ---@return table|nil json Decoded stdout, when it is JSON
   ---@return string stderr
+  ---@return string stdout As it came
   local function cli(args, cwd)
     local argv = { vim.v.progpath, "--headless", "-u", "NONE", "-l", script }
     vim.list_extend(argv, args)
     local res =
       vim.system(argv, { text = true, cwd = cwd or repo, env = { LIB_NVIM_DIR = lib } }):wait(20000)
     local ok, json = pcall(vim.json.decode, res.stdout or "", { luanil = { object = true } })
-    return res.code, ok and json or nil, res.stderr or ""
+    return res.code, ok and json or nil, res.stderr or "", res.stdout or ""
   end
 
   ---The envelope every answer has.
@@ -117,5 +118,20 @@ describe("gitsuite command line (scripts/gitsuite.lua)", function()
     assert.equals(1, rcode)
     envelope(rjson, "log", false)
     assert.truthy(rjson.errors[1].message:find("not a revision", 1, true))
+  end)
+
+  it("every string of an answer is made valid UTF-8 (a Latin-1 subject, author or path)", function()
+    -- git's log is pinned to UTF-8 (`--encoding`), but a blame summary, an author or a path comes as git has it.
+    local latin = "fix: " .. string.char(196) .. "nderung"
+    local cli_mod = require("gitsuite.cli")
+    local out = cli_mod.valid_utf8({
+      commits = { { subject = latin, time = 1, gone = vim.NIL } },
+      [latin] = true,
+    })
+    assert.same({
+      commits = { { subject = "fix: ?nderung", time = 1, gone = vim.NIL } },
+      ["fix: ?nderung"] = true,
+    }, out)
+    assert.equals("Ä ok", cli_mod.valid_utf8("Ä ok"))
   end)
 end)

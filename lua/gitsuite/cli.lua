@@ -376,6 +376,11 @@ local function cmd_blame(args)
   if not root then
     return { result = vim.NIL, errors = { { target = file, message = "not in a git repository" } } }
   end
+  -- Both resolved, so the file's path starts with its repository's -- unless a symlink or a case difference got in
+  -- between, which is told rather than cut at the wrong place.
+  if path:sub(1, #root + 1) ~= root .. "/" then
+    return { result = vim.NIL, errors = { { target = file, message = "not below " .. root } } }
+  end
   local rel = path:sub(#root + 2)
 
   local git = require("lib.nvim.git")
@@ -559,6 +564,21 @@ local COMMANDS = {
 
 -- Entry ---------------------------------------------------------------------------
 
+---`value` with every string in it made valid UTF-8 (`lib.lua.strings.safe.utf8`: a byte that is none becomes `?`).
+---A commit message, an author or a path is raw bytes in whatever encoding its author used, and a JSON string must
+---be UTF-8 -- one Latin-1 subject would make the whole answer unreadable for a strict parser.
+---@param value any
+---@return any
+function M.valid_utf8(value)
+  if type(value) == "string" then return require("lib.lua.strings.safe").utf8(value) end
+  if type(value) ~= "table" or value == vim.NIL then return value end
+  local out = {}
+  for k, v in pairs(value) do
+    out[M.valid_utf8(k)] = M.valid_utf8(v)
+  end
+  return out
+end
+
 ---Writes one line to `stream`.
 ---@param stream file*
 ---@param text string
@@ -612,8 +632,8 @@ function M.run(argv)
       schema = M.SCHEMA,
       command = command,
       ok = #outcome.errors == 0,
-      result = outcome.result,
-      errors = outcome.errors,
+      result = M.valid_utf8(outcome.result),
+      errors = M.valid_utf8(outcome.errors),
     })
   )
   return #outcome.errors == 0 and 0 or 1
