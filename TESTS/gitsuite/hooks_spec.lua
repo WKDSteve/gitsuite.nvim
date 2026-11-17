@@ -428,6 +428,100 @@ describe("gitsuite.features.hooks", function()
     end)
 
     it(
+      "husky 9 layout: commits run the line through sh -e, in a second clone only once its key is set",
+      function()
+        if vim.fn.executable("bash") == 0 then
+          pending("bash not on PATH")
+          return
+        end
+        -- What `husky` generates on install, in the same shape (written here, not taken from husky): a folder `_`
+        -- that git ignores, one wrapper per hook that sources `h`, and `h` running `.husky/<hook>` under `sh -e`.
+        local H = table.concat({
+          "#!/usr/bin/env sh",
+          'n=$(basename "$0")',
+          's=$(dirname "$(dirname "$0")")/$n',
+          '[ -f "$s" ] || exit 0',
+          'sh -e "$s" "$@"',
+          "c=$?",
+          '[ $c = 0 ] || echo "husky-like: $n failed ($c)" >&2',
+          "exit $c",
+          "",
+        }, "\n")
+        local function husky_install(dir)
+          vim.fn.mkdir(dir .. "/.husky/_", "p")
+          write_file(dir .. "/.husky/_/h", H)
+          write_file(dir .. "/.husky/_/commit-msg", '#!/usr/bin/env sh\n. "$(dirname "$0")/h"\n')
+          write_file(dir .. "/.husky/_/.gitignore", "*\n")
+          for _, f in ipairs({ "h", "commit-msg" }) do
+            vim.uv.fs_chmod(dir .. "/.husky/_/" .. f, tonumber("755", 8))
+          end
+          git(dir, "config", "--local", "core.hooksPath", ".husky/_")
+        end
+        local function commit(dir, file)
+          write_file(dir .. "/" .. file, file .. "\n")
+          git(dir, "add", "-A")
+          git(
+            dir,
+            "-c",
+            "user.name=spec",
+            "-c",
+            "user.email=spec@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            "feat: " .. file .. "\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+          )
+          return vim
+            .system({ "git", "-C", dir, "log", "-1", "--format=%B" }, { text = true })
+            :wait().stdout
+        end
+
+        local repo = new_repo("h9")
+        husky_install(repo)
+        local res = by_id(hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true }))
+        assert.equals(
+          "installed",
+          res["no-claude-trailer"].status,
+          res["no-claude-trailer"].message
+        )
+        local first = commit(repo, "a.txt")
+        assert.truthy(first:find("feat: a.txt", 1, true), first)
+        assert.is_nil(first:find("Claude", 1, true), "the line ran under sh -e: " .. first)
+        local tracked = vim.system({ "git", "-C", repo, "ls-files" }, { text = true }):wait().stdout
+        assert.truthy(
+          tracked:find(".husky/commit-msg", 1, true),
+          "the line is committed: " .. tracked
+        )
+        assert.is_nil(tracked:find(".husky/_/", 1, true), "the generated folder is not")
+
+        -- Another clone: the line comes with the repository, the key does not.
+        local clone = base .. "/h9-clone"
+        local cloned = vim.system({ "git", "clone", "-q", repo, clone }, { text = true }):wait()
+        assert.equals(0, cloned.code, cloned.stderr)
+        husky_install(clone)
+        local without = commit(clone, "b.txt")
+        assert.truthy(
+          without:find("Claude", 1, true),
+          "no key: the line does nothing, the commit goes through"
+        )
+        local again =
+          by_id(hooks.install(clone, { "no-claude-trailer" }, { into_versioned = true }))
+        assert.equals(
+          "updated",
+          again["no-claude-trailer"].status,
+          again["no-claude-trailer"].message
+        )
+        local status =
+          vim.system({ "git", "-C", clone, "status", "--porcelain" }, { text = true }):wait().stdout
+        assert.equals("", status, "only the local key changed")
+        local with = commit(clone, "c.txt")
+        assert.is_nil(with:find("Claude", 1, true), "with the key the hook works: " .. with)
+      end
+    )
+
+    it(
       "the line does nothing without the key or with a key that names no file, even under -e",
       function()
         if vim.fn.executable("bash") == 0 then
