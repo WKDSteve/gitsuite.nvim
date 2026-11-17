@@ -68,7 +68,7 @@ see `lua/gitsuite/bindings/keymaps.lua`):
 | `:Git hunk stage` | Stage the hunk under the cursor |
 | `:Git hunk stage-buffer` | Stage every hunk in the current buffer |
 | `:Git hunk toggle-deleted` | Toggle showing deleted lines inline |
-| `:Git hooks install [--repo=<dir>] [--hook=<no-claude-trailer\|large-files>] [--all] [--into-versioned]` | Install the prepared hooks (commit-msg without Claude trailers, pre-commit large-file warning) as one-line wrappers; foreign hooks are never overwritten, repositories with their own core.hooksPath get the line to add by hand (`--all`: every repository of dashboard.base_dir; `--into-versioned`: the line goes into the hook file of that folder, not committed) |
+| `:Git hooks install [--repo=<dir>] [--hook=<no-claude-trailer\|large-files>] [--all] [--into-versioned]` | Install the prepared hooks (commit-msg without Claude trailers, pre-commit large-file warning) as one-line wrappers; foreign hooks are never overwritten, repositories with their own core.hooksPath get the line to add by hand (`--all`: every repository of dashboard.base_dir; `--into-versioned`: the line goes into the hook file of that folder, not committed, and the script's path into the local config) |
 | `:Git hooks list [--repo=<dir>]` | Show which prepared hooks exist and which are installed in this repository |
 | `:Git hooks uninstall [--repo=<dir>] [--hook=<no-claude-trailer\|large-files>] [--all] [--into-versioned]` | Remove gitsuite's own hooks; a hook that is not ours is left alone (`--into-versioned`: gitsuite's line out of the hook file of a versioned core.hooksPath) |
 | `:Git plugins` | Open the report tab: the last one shown in this Neovim, else the newest stored report (never a scan; :Git plugins report builds one) |

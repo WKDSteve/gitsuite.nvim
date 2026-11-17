@@ -445,7 +445,7 @@ local function build_routes()
         {
           name = "into-versioned",
           bool = true,
-          desc = "In a repository with its own core.hooksPath, add the line to the hook file there (no commit)",
+          desc = "In a repository with its own core.hooksPath, add the line to the hook file there (no commit) and the script's path to the local config",
         },
       },
       desc = "Install the prepared hooks (commit-msg without Claude trailers, pre-commit large-file warning); foreign hooks are never overwritten, repositories with their own core.hooksPath get the line to add by hand (--into-versioned: added to their hook file, not committed)",

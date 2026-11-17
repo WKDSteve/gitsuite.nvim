@@ -230,22 +230,29 @@ overwritten or removed. `:Git hooks list` shows what is installed,
 **A repository with its own `core.hooksPath`** (`.husky`, `scripts/hooks`)
 keeps its hooks in a versioned folder, and git no longer reads `.git/hooks/`
 there. By default gitsuite writes nothing in such a repository: the result is
-`manual`, with the line to add to the hook there yourself.
+`manual`, with the line to add to the hook there yourself and the one
+`git config --local gitsuite.hook.<id> <path>` to run once.
+
+The line holds no path. That folder is shared with every clone, and a public
+repository with everyone, so the path of the script (with your user name in it)
+lives only in the repository's local config, under `gitsuite.hook.<id>`, which
+is never committed. The line reads that key and runs the script only where it
+names a file; in a clone without the key it does nothing, also under `sh -e`
+(husky). A failure of the script still stops the commit.
 
 `--into-versioned` adds that line for you, to the hook file in that folder
 (for example `.husky/commit-msg`; created with a `#!/usr/bin/env sh` line if it
 is missing, otherwise appended, before a last `exec` or `exit` line; with husky 9, whose
-`core.hooksPath` is the generated `.husky/_`, the file in `.husky/`). It does nothing
-else: no commit and no change to the git config. The change shows up in
-`git status`; review it and commit it yourself, or leave it uncommitted. The
-line names the script in your gitsuite checkout and runs it only where that
-file exists, so on another machine or in another clone it does nothing. A
-failure of the script still stops the commit. `:Git hooks uninstall
---into-versioned` takes the line out again, and removes a hook file that held
-nothing else.
+`core.hooksPath` is the generated `.husky/_`, the file in `.husky/`), and sets
+`gitsuite.hook.<id>` in the local config. Nothing else: no commit, and
+`core.hooksPath` stays as it is. The change shows up in `git status`; review it
+and commit it yourself, or leave it uncommitted. `:Git hooks uninstall
+--into-versioned` takes the line and the key out again, and removes a hook file
+that held nothing else.
 
-Run again, it reports `unchanged`; a line of an older install (the plugin moved,
-another machine) is replaced in place (`updated`). A hook file that is a symlink
+Run again, it reports `unchanged`. In another clone, where the line is already
+committed, it only sets the key (`updated`); a line in an older form is
+replaced in place (`updated`). A hook file that is a symlink
 is never written through (`error`), and a `core.hooksPath` outside the work tree
 (a shared `~/hooks` folder) is not versioned with the repository: it stays
 `manual`, with or without the flag.

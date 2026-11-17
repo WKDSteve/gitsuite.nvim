@@ -16,8 +16,10 @@
 --- * **A versioned hooks folder is written to only when asked.** A repository whose own config sets
 ---   `core.hooksPath` (`.husky`, `scripts/hooks`) is not touched by default: the result is `manual`, with the exact
 ---   line to add to the hook there. With `into_versioned` that line goes into the hook file of that folder (created
----   if missing) and nothing else: no commit, no change to the config. The line names the script of this checkout,
----   so it does nothing where that file is missing (another clone of the repository, another machine). A
+---   if missing), and the path of the script into the repository's local config (`gitsuite.hook.<id>`, never
+---   committed): no commit, `core.hooksPath` untouched. The line itself holds no path (no user name lands in a
+---   shared repository) and does nothing where the key is not set or names no file (another clone, another
+---   machine). A
 ---   `core.hooksPath` set only globally is reported in `hooks_path` with a note, because whether the repository's
 ---   own `hooks/` folder is read then depends on that global folder.
 ---
@@ -193,17 +195,38 @@ local function wrapper(entry)
   )
 end
 
----The line for a hook in a versioned folder: it runs the script only where it exists (the folder is shared with
----every other clone) and passes a failure on, so a hook shell without `-e` still stops the commit.
+---The local git config key that holds the path of the script for the line of `entry`.
+---@param entry Gitsuite.Hooks.Entry
+---@return string
+function M.config_key(entry)
+  return "gitsuite.hook." .. entry.id
+end
+
+---The line for a hook in a versioned folder. It holds no path: the folder is shared with every other clone (and
+---maybe the public), so the script's path is read from the local config, where only this clone has it. It runs the
+---script only where that key names a file, survives `sh -e` (husky) when the key is missing, and passes a failure
+---on, so a hook shell without `-e` still stops the commit.
 ---@param entry Gitsuite.Hooks.Entry
 ---@return string
 local function snippet(entry)
-  local path = M.script_path(entry)
-  return ('if [ -f "%s" ]; then bash "%s" "$@" || exit $?; fi   %s'):format(
-    path,
-    path,
+  return ('gitsuite_hook=$(git config --get %s || true); if [ -n "$gitsuite_hook" ] && [ -f "$gitsuite_hook" ]; then bash "$gitsuite_hook" "$@" || exit $?; fi   %s'):format(
+    M.config_key(entry),
     entry.marker
   )
+end
+
+---Set the local config key of `entry` to the script of this checkout, unless it already is.
+---@param repo string
+---@param entry Gitsuite.Hooks.Entry
+---@return boolean changed
+---@return string|nil err
+local function set_config(repo, entry)
+  local want = M.script_path(entry)
+  if git(repo, "config", "--local", "--get", M.config_key(entry)) == want then return false, nil end
+  if git(repo, "config", "--local", M.config_key(entry), want) == nil then
+    return false, "cannot set " .. M.config_key(entry) .. " in the local config"
+  end
+  return true, nil
 end
 
 ---The shebang of a hook file `into_versioned` creates.
@@ -266,7 +289,16 @@ local function add_to_versioned(info, entry, r)
     end
   end
   if found and current and select(2, text:gsub(vim.pesc(entry.marker), "")) == 1 then
-    r.status, r.message = "unchanged", "already in " .. file
+    local changed, cerr = set_config(info.repo, entry)
+    if cerr then
+      r.status, r.message = "error", cerr
+    elseif changed then
+      r.status, r.message =
+        "updated",
+        ("the line is in %s; set %s in the local config"):format(file, M.config_key(entry))
+    else
+      r.status, r.message = "unchanged", "already in " .. file
+    end
     return
   end
 
@@ -289,6 +321,11 @@ local function add_to_versioned(info, entry, r)
     return
   end
   if not exists then pcall(vim.uv.fs_chmod, file, tonumber("755", 8)) end
+  local _, cerr = set_config(info.repo, entry)
+  if cerr then
+    r.status, r.message = "error", cerr
+    return
+  end
   r.status = found and "updated" or "installed"
   r.message = ("%s %s (core.hooksPath = %s is versioned: review the change and commit it yourself)"):format(
     found and "updated the line in" or "added to",
@@ -309,6 +346,7 @@ local function remove_from_versioned(info, entry, r)
     r.status, r.message = "error", why
     return
   end
+  git(info.repo, "config", "--local", "--unset", M.config_key(entry))
   local text = read(file)
   if not text:find(entry.marker, 1, true) then
     r.status, r.message = "absent", "not in " .. file
@@ -358,15 +396,17 @@ function M.install(repo, ids, opts)
         r.status = "manual"
         r.message = (
           "core.hooksPath = %s in this repository points outside its work tree: nothing was written "
-          .. "(not even with --into-versioned). Add this line to the %s hook there:"
-        ):format(info.hooks_path, e.hook)
+          .. "(not even with --into-versioned). Run git config --local %s '%s' once and add this line "
+          .. "to the %s hook there:"
+        ):format(info.hooks_path, M.config_key(e), M.script_path(e), e.hook)
         r.snippet = snippet(e)
       elseif info.hooks_path_local then
         r.status = "manual"
         r.message = (
           "core.hooksPath = %s in this repository: its hooks folder is versioned, nothing was written. "
-          .. "Add this line to the %s hook there (or run again with --into-versioned):"
-        ):format(info.hooks_path, e.hook)
+          .. "Run git config --local %s '%s' once and add this line to the %s hook there "
+          .. "(or run again with --into-versioned, which does both):"
+        ):format(info.hooks_path, M.config_key(e), M.script_path(e), e.hook)
         r.snippet = snippet(e)
       elseif entry_state == "foreign" then
         r.status = "foreign"

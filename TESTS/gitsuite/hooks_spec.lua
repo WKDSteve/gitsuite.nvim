@@ -104,7 +104,8 @@ describe("gitsuite.features.hooks", function()
 
     local res = by_id(hooks.install(repo))
     assert.equals("manual", res["no-claude-trailer"].status)
-    assert.truthy(res["no-claude-trailer"].snippet:find("commit-msg-no-claude-trailer.sh", 1, true))
+    assert.truthy(res["no-claude-trailer"].snippet:find("gitsuite.hook.no-claude-trailer", 1, true))
+    assert.truthy(res["no-claude-trailer"].message:find("commit-msg-no-claude-trailer.sh", 1, true))
     assert.truthy(res["no-claude-trailer"].message:find(".husky", 1, true))
     assert.is_nil(
       vim.uv.fs_stat(repo .. "/.husky/commit-msg"),
@@ -128,6 +129,12 @@ describe("gitsuite.features.hooks", function()
       f:write(text)
       f:close()
     end
+    local function config_get(repo, key)
+      local res = vim
+        .system({ "git", "-C", repo, "config", "--local", "--get", key }, { text = true })
+        :wait()
+      return res.code == 0 and res.stdout or nil
+    end
     local function config_of(repo)
       return vim
         .system({ "git", "-C", repo, "config", "--local", "--get", "core.hooksPath" }, { text = true })
@@ -142,8 +149,19 @@ describe("gitsuite.features.hooks", function()
       local text = read(repo .. "/.husky/commit-msg")
       assert.truthy(text:find("^#!/usr/bin/env sh\n"), text)
       assert.truthy(text:find("# gitsuite-hook: no-claude-trailer", 1, true), text)
-      assert.truthy(text:find('if [ -f "', 1, true), "only where the script exists: " .. text)
+      assert.truthy(text:find("git config --get gitsuite.hook.no-claude-trailer", 1, true), text)
+      assert.truthy(
+        text:find('[ -f "$gitsuite_hook" ]', 1, true),
+        "only where it names a file: " .. text
+      )
       assert.truthy(text:find("|| exit $?", 1, true), "a failure stops the commit: " .. text)
+      local script = hooks.script_path(assert(hooks.find("no-claude-trailer")))
+      assert.is_nil(text:find(script, 1, true), "no path (no user name) in the versioned file")
+      assert.equals(
+        script .. "\n",
+        config_get(repo, "gitsuite.hook.no-claude-trailer"),
+        "the path is local"
+      )
       assert.is_nil(vim.uv.fs_stat(repo .. "/.husky/pre-commit"), "only the hook asked for")
 
       local again = by_id(hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true }))
@@ -188,7 +206,7 @@ describe("gitsuite.features.hooks", function()
         assert.equals("installed", res["large-files"].status)
         local msg = read(repo .. "/.husky/commit-msg")
         assert.equals(1, select(2, msg:gsub("\n", "\n")) - 1, "one line added: " .. msg)
-        assert.truthy(msg:find("^npx %-%-no %-%- commitlint %-%-edit %$1\nif %[ %-f "), msg)
+        assert.truthy(msg:find("^npx %-%-no %-%- commitlint %-%-edit %$1\ngitsuite_hook="), msg)
         local pre = vim.split(read(repo .. "/.husky/pre-commit"), "\n", { plain = true })
         assert.equals("#!/bin/sh", pre[1])
         assert.equals("echo checking", pre[2])
@@ -271,7 +289,7 @@ describe("gitsuite.features.hooks", function()
       assert.equals("updated", res["no-claude-trailer"].status, res["no-claude-trailer"].message)
       local lines = vim.split(read(repo .. "/.husky/commit-msg"), "\n", { plain = true })
       assert.is_nil(table.concat(lines, "\n"):find("/old/place", 1, true))
-      assert.truthy(lines[2]:find("commit-msg-no-claude-trailer.sh", 1, true), "in the same place")
+      assert.truthy(lines[2]:find("gitsuite.hook.no-claude-trailer", 1, true), "in the same place")
       assert.equals("echo after", lines[3])
       local again = by_id(hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true }))
       assert.equals("unchanged", again["no-claude-trailer"].status)
@@ -345,20 +363,51 @@ describe("gitsuite.features.hooks", function()
       assert.is_nil(msg:find("Claude", 1, true), msg)
     end)
 
-    it("the line does nothing where the script is missing (another clone)", function()
-      if vim.fn.executable("bash") == 0 then
-        pending("bash not on PATH")
-        return
+    it(
+      "the line does nothing without the key or with a key that names no file, even under -e",
+      function()
+        if vim.fn.executable("bash") == 0 then
+          pending("bash not on PATH")
+          return
+        end
+        local repo = husky_repo("v6")
+        local line =
+          by_id(hooks.install(repo, { "no-claude-trailer" }))["no-claude-trailer"].snippet
+        local function run()
+          -- -e as husky 9 runs a hook: a missing key must not end it
+          return vim
+            .system({ "bash", "-e", "-c", line .. "\necho after" }, { text = true, cwd = repo })
+            :wait()
+        end
+        local unset = run()
+        assert.equals(0, unset.code, unset.stderr)
+        assert.equals("after\n", unset.stdout)
+        git(
+          repo,
+          "config",
+          "--local",
+          "gitsuite.hook.no-claude-trailer",
+          base .. "/no-such-script.sh"
+        )
+        local missing = run()
+        assert.equals(0, missing.code, missing.stderr)
+        assert.equals("after\n", missing.stdout)
       end
-      local repo = husky_repo("v6")
-      local res = by_id(hooks.install(repo, { "no-claude-trailer" }))
-      local line = res["no-claude-trailer"].snippet:gsub(
-        vim.pesc(hooks.script_path(assert(hooks.find("no-claude-trailer")))),
-        base .. "/no-such-script.sh"
-      )
-      local run = vim.system({ "bash", "-c", line .. "\necho after" }, { text = true }):wait()
-      assert.equals(0, run.code, run.stderr)
-      assert.equals("after\n", run.stdout)
+    )
+
+    it("another clone: the line is already committed, install sets only the local key", function()
+      local repo = husky_repo("v13")
+      hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true })
+      local text = read(repo .. "/.husky/commit-msg")
+      git(repo, "config", "--local", "--unset", "gitsuite.hook.no-claude-trailer")
+      local res = by_id(hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true }))
+      assert.equals("updated", res["no-claude-trailer"].status, res["no-claude-trailer"].message)
+      assert.equals(text, read(repo .. "/.husky/commit-msg"), "the file is untouched")
+      assert.is_not_nil(config_get(repo, "gitsuite.hook.no-claude-trailer"))
+
+      local gone = by_id(hooks.uninstall(repo, { "no-claude-trailer" }, { into_versioned = true }))
+      assert.equals("removed", gone["no-claude-trailer"].status)
+      assert.is_nil(config_get(repo, "gitsuite.hook.no-claude-trailer"), "uninstall unsets the key")
     end)
   end)
 
