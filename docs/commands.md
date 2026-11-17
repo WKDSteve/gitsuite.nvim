@@ -248,7 +248,13 @@ is missing, otherwise appended, before a last `exec` or `exit` line; with husky 
 `core.hooksPath` stays as it is. The change shows up in `git status`; review it
 and commit it yourself, or leave it uncommitted. `:Git hooks uninstall
 --into-versioned` takes the line and the key out again, and removes a hook file
-that held nothing else.
+that held nothing else. Without the flag, `uninstall` only touches
+`.git/hooks/`: nothing in the versioned folder is ever deleted.
+
+In such a repository `:Git hooks list` names the versioned folder and shows,
+per hook, whether the line is in its hook file there (`in-versioned`) or not
+(`manual`), not the unused `.git/hooks/`. With a `core.hooksPath` outside the
+work tree every hook is `manual`.
 
 Run again, it reports `unchanged`. In another clone, where the line is already
 committed, it only sets the key (`updated`); a line in an older form is

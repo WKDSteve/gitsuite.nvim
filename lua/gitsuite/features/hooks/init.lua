@@ -131,7 +131,10 @@ end
 ---@field hooks_path_local boolean `core.hooksPath` is set in the repository's own config
 ---@field versioned_dir string|nil the folder `core.hooksPath` names, absolute, when it is set in the repository's own
 ---  config and lies in its work tree (a folder outside, a shared `~/hooks`, is not versioned with the repository)
----@field entries { id: string, hook: string, state: "absent"|"ours"|"foreign" }[]
+---@field entries { id: string, hook: string, state: "absent"|"ours"|"foreign" }[] what is in `hooks_dir`
+---@field versioned { id: string, hook: string, file: string, state: "in-versioned"|"manual" }[]|nil only with a
+---  `versioned_dir`: whether the hook file there holds gitsuite's line. Kept apart from `entries`, which `uninstall`
+---  deletes whole files by: nothing in the versioned folder is ever deleted that way.
 ---@field err string|nil
 
 ---What is installed in `repo`.
@@ -170,6 +173,16 @@ function M.inspect(repo)
       state = read(file):find(e.marker, 1, true) and "ours" or "foreign"
     end
     result.entries[#result.entries + 1] = { id = e.id, hook = e.hook, state = state }
+  end
+  if result.versioned_dir then
+    result.versioned = {}
+    for _, e in ipairs(CATALOG) do
+      local file = result.versioned_dir .. "/" .. e.hook
+      local st = vim.uv.fs_lstat(file)
+      local has = st and st.type == "file" and read(file):find(e.marker, 1, true) ~= nil
+      result.versioned[#result.versioned + 1] =
+        { id = e.id, hook = e.hook, file = file, state = has and "in-versioned" or "manual" }
+    end
   end
   return result
 end

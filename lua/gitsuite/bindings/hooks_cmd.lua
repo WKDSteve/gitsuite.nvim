@@ -54,23 +54,51 @@ end
 
 ---@param repo string|nil
 function M.list(repo)
-  local hooks = require("gitsuite.features.hooks")
   local path = repo and vim.fs.normalize(vim.fn.fnamemodify(repo, ":p")) or current_repo()
-  local info = hooks.inspect(path)
-  if info.err then
-    say(info.err, vim.log.levels.WARN)
+  local lines, err = M.list_lines(path)
+  if not lines then
+    say(err or ("hooks: cannot inspect " .. path), vim.log.levels.WARN)
     return
   end
+  say(table.concat(lines, "\n"), vim.log.levels.INFO)
+end
+
+---The report of `:Git hooks list` for one repository.
+---@param path string
+---@return string[]|nil lines
+---@return string|nil err
+function M.list_lines(path)
+  local hooks = require("gitsuite.features.hooks")
+  local info = hooks.inspect(path)
+  if info.err then return nil, info.err end
+  -- With a core.hooksPath of the repository's own, git never reads .git/hooks/: what counts is the line in the
+  -- versioned folder, or `manual` for a folder outside the work tree (gitsuite writes nothing there).
   local state = {}
-  for _, e in ipairs(info.entries) do
-    state[e.id] = e.state
+  if info.versioned then
+    for _, e in ipairs(info.versioned) do
+      state[e.id] = e.state
+    end
+  elseif info.hooks_path_local then
+    for _, e in ipairs(info.entries) do
+      state[e.id] = "manual"
+    end
+  else
+    for _, e in ipairs(info.entries) do
+      state[e.id] = e.state
+    end
   end
   local lines =
     { path .. (info.hooks_path and ("  (core.hooksPath = " .. info.hooks_path .. ")") or "") }
-  for _, e in ipairs(hooks.catalog()) do
-    lines[#lines + 1] = ("  %-18s %-10s %s"):format(e.id, state[e.id] or "absent", e.desc)
+  if info.versioned_dir then
+    lines[#lines + 1] = "  versioned hooks folder: " .. info.versioned_dir
+  elseif info.hooks_path_local then
+    lines[#lines + 1] =
+      "  hooks folder outside the work tree: :Git hooks install names the line to add there"
   end
-  say(table.concat(lines, "\n"), vim.log.levels.INFO)
+  for _, e in ipairs(hooks.catalog()) do
+    lines[#lines + 1] = ("  %-18s %-12s %s"):format(e.id, state[e.id] or "absent", e.desc)
+  end
+  return lines, nil
 end
 
 return M

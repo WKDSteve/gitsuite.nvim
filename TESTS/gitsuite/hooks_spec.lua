@@ -233,6 +233,70 @@ describe("gitsuite.features.hooks", function()
     end)
 
     it(
+      "list shows the line in the versioned folder: in-versioned or manual, with the folder",
+      function()
+        local list_lines = require("gitsuite.bindings.hooks_cmd").list_lines
+        local repo = husky_repo("v8")
+        local function row(lines, id)
+          for _, l in ipairs(lines) do
+            if l:match("^%s+" .. vim.pesc(id) .. "%s") then return l end
+          end
+          return ""
+        end
+        local before = assert(list_lines(repo))
+        local text = table.concat(before, "\n")
+        assert.truthy(row(before, "no-claude-trailer"):find(" manual ", 1, true), text)
+        assert.truthy(row(before, "large-files"):find(" manual ", 1, true), text)
+        local folder = before[2]:match("versioned hooks folder: (.+)$")
+        assert.is_not_nil(folder, text)
+        assert.equals(vim.uv.fs_realpath(repo .. "/.husky"), vim.uv.fs_realpath(folder))
+
+        hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true })
+        local after = assert(list_lines(repo))
+        assert.truthy(row(after, "no-claude-trailer"):find(" in-versioned ", 1, true))
+        assert.truthy(
+          row(after, "large-files"):find(" manual ", 1, true),
+          "only the hook installed"
+        )
+      end
+    )
+
+    it("uninstall without --into-versioned never deletes in the versioned folder", function()
+      local repo = new_repo("v9")
+      hooks.install(repo, nil) -- gitsuite's wrappers in .git/hooks
+      vim.fn.mkdir(repo .. "/.husky", "p")
+      git(repo, "config", "--local", "core.hooksPath", ".husky")
+      local only_marker = "#!/usr/bin/env sh\n# gitsuite-hook: large-files\n"
+      write_file(repo .. "/.husky/pre-commit", only_marker)
+      hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true })
+      local husky_msg = read(repo .. "/.husky/commit-msg")
+      local info = hooks.inspect(repo)
+      assert.equals(2, #info.versioned)
+
+      hooks.uninstall(repo, nil)
+      assert.equals(
+        husky_msg,
+        read(repo .. "/.husky/commit-msg"),
+        "the versioned hook is untouched"
+      )
+      assert.equals(
+        only_marker,
+        read(repo .. "/.husky/pre-commit"),
+        "a versioned file holding only gitsuite's marker is not deleted either"
+      )
+    end)
+
+    it("list in a repository without core.hooksPath reads .git/hooks as before", function()
+      local repo = new_repo("v10")
+      hooks.install(repo, { "large-files" })
+      local lines = assert(require("gitsuite.bindings.hooks_cmd").list_lines(repo))
+      assert.is_nil(hooks.inspect(repo).versioned)
+      local text = table.concat(lines, "\n")
+      assert.truthy(text:find("large%-files%s+ours"), text)
+      assert.truthy(text:find("no%-claude%-trailer%s+absent"), text)
+    end)
+
+    it(
       "husky 9 (core.hooksPath = .husky/_): the line goes to .husky/, not the generated folder",
       function()
         local repo = new_repo("v7")
