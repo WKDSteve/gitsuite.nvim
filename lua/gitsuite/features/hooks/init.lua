@@ -83,6 +83,35 @@ local function git(repo, ...)
   return vim.trim(res.stdout or "")
 end
 
+---`path` with every existing part resolved (symlinks, `/var` -> `/private/var`); the parts that do not exist
+---yet are kept as they are. nil when not even the root exists.
+---@param path string
+---@return string|nil
+local function real(path)
+  local cur, rest = vim.fs.normalize(path), {}
+  while not vim.uv.fs_realpath(cur) do
+    local up = vim.fs.dirname(cur)
+    if up == cur then return nil end
+    table.insert(rest, 1, vim.fs.basename(cur))
+    cur = up
+  end
+  local base = vim.fs.normalize(assert(vim.uv.fs_realpath(cur)))
+  return #rest > 0 and (base .. "/" .. table.concat(rest, "/")) or base
+end
+
+---Whether `path` lies in the folder `top` (or is it), after resolving both.
+---@param path string
+---@param top string
+---@return boolean
+local function inside(path, top)
+  local p, t = real(path), real(top)
+  if not p or not t then return false end
+  if vim.fn.has("win32") == 1 then
+    p, t = p:lower(), t:lower()
+  end
+  return p == t or p:sub(1, #t + 1) == (t:sub(-1) == "/" and t or t .. "/")
+end
+
 ---@param path string
 ---@return string
 local function read(path)
@@ -98,7 +127,8 @@ end
 ---@field hooks_dir string|nil the repository's own hooks folder (`<git-common-dir>/hooks`)
 ---@field hooks_path string|nil `core.hooksPath` as configured, when set
 ---@field hooks_path_local boolean `core.hooksPath` is set in the repository's own config
----@field versioned_dir string|nil the folder `core.hooksPath` names, absolute, when it is set in the repository's own config
+---@field versioned_dir string|nil the folder `core.hooksPath` names, absolute, when it is set in the repository's own
+---  config and lies in its work tree (a folder outside, a shared `~/hooks`, is not versioned with the repository)
 ---@field entries { id: string, hook: string, state: "absent"|"ours"|"foreign" }[]
 ---@field err string|nil
 
@@ -119,17 +149,16 @@ function M.inspect(repo)
   result.hooks_path_local = git(repo, "config", "--local", "--get", "core.hooksPath") ~= nil
   if result.hooks_path_local and result.hooks_path then
     -- git reads a relative core.hooksPath from the top of the work tree, and expands a leading ~.
+    local top = git(repo, "rev-parse", "--show-toplevel") or repo
     local dir = result.hooks_path:gsub("^~", (vim.fn.expand("~"):gsub("%%", "%%%%")))
-    if not (dir:match("^/") or dir:match("^%a:[/\\]")) then
-      dir = (git(repo, "rev-parse", "--show-toplevel") or repo) .. "/" .. dir
-    end
+    if not (dir:match("^/") or dir:match("^%a:[/\\]")) then dir = top .. "/" .. dir end
     dir = vim.fs.normalize(dir)
     -- husky 9 points core.hooksPath at `.husky/_`: generated, ignored by git, rewritten on every install, and its
     -- wrappers end in `exit` after running the hook of the same name in `.husky/`. That one is the versioned file.
     if vim.fs.basename(dir) == "_" and vim.fs.basename(vim.fs.dirname(dir)) == ".husky" then
       dir = vim.fs.dirname(dir)
     end
-    result.versioned_dir = dir
+    if inside(dir, top) then result.versioned_dir = dir end
   end
 
   for _, e in ipairs(CATALOG) do
@@ -146,7 +175,7 @@ end
 ---@class Gitsuite.Hooks.Result
 ---@field repo string
 ---@field id string
----@field status "installed"|"unchanged"|"removed"|"absent"|"foreign"|"manual"|"error"
+---@field status "installed"|"updated"|"unchanged"|"removed"|"absent"|"foreign"|"manual"|"error"
 ---@field message string
 ---@field snippet string|nil for `manual`: the line to add to the hook in the repository's own hooks folder
 
@@ -191,29 +220,68 @@ local function write(path, text)
   return nil
 end
 
----Add the line of `entry` to the hook file in the versioned folder; before a last `exec` line, which would never
----hand back to it.
+---Why the hook file `file` must not be written to, or nil. A symlink is never followed: it could point anywhere
+---(`~/.bashrc`), and a dangling one would be created there.
+---@param file string
+---@return string|nil
+local function refuse(file)
+  local st = vim.uv.fs_lstat(file)
+  if st and st.type == "link" then return file .. " is a symlink: left alone" end
+  if st and st.type ~= "file" then return file .. " is not a file: left alone" end
+  return nil
+end
+
+---Whether a hook line ends the script, so that nothing after it runs: `exec ...`, `exit`, `exit 0`, `exit $?`.
+---@param line string
+---@return boolean
+local function ends_script(line)
+  local l = line:gsub("\r$", "")
+  return l:match("^%s*exec%s") ~= nil or l:match("^%s*exit%s") ~= nil or l:match("^%s*exit$") ~= nil
+end
+
+---Add the line of `entry` to the hook file in the versioned folder; before a last `exec` or `exit` line, after
+---which it would never run. A line of an older install (another path to the script) is replaced.
 ---@param info Gitsuite.Hooks.Inspection
 ---@param entry Gitsuite.Hooks.Entry
 ---@param r Gitsuite.Hooks.Result
 local function add_to_versioned(info, entry, r)
   local file = info.versioned_dir .. "/" .. entry.hook
-  local exists = vim.uv.fs_stat(file) ~= nil
+  local why = refuse(file)
+  if why then
+    r.status, r.message = "error", why
+    return
+  end
+  local exists = vim.uv.fs_lstat(file) ~= nil
   local text = exists and read(file) or NEW_HOOK
-  if text:find(entry.marker, 1, true) then
+  local want = snippet(entry)
+  local lines = vim.split(text, "\n", { plain = true })
+  if lines[#lines] == "" then table.remove(lines) end
+
+  local found, current = nil, true
+  for i = #lines, 1, -1 do
+    if lines[i]:find(entry.marker, 1, true) then
+      if lines[i]:gsub("\r$", "") ~= want then current = false end
+      if found then table.remove(lines, found) end
+      found = i
+    end
+  end
+  if found and current and select(2, text:gsub(vim.pesc(entry.marker), "")) == 1 then
     r.status, r.message = "unchanged", "already in " .. file
     return
   end
-  local lines = vim.split(text, "\n", { plain = true })
-  if lines[#lines] == "" then table.remove(lines) end
-  local at = #lines + 1
-  for i = #lines, 1, -1 do
-    if lines[i]:match("%S") then
-      if lines[i]:match("^%s*exec%s") then at = i end
-      break
+
+  if found then
+    lines[found] = want
+  else
+    local at = #lines + 1
+    for i = #lines, 1, -1 do
+      if lines[i]:match("%S") then
+        if ends_script(lines[i]) then at = i end
+        break
+      end
     end
+    table.insert(lines, at, want)
   end
-  table.insert(lines, at, snippet(entry))
   vim.fn.mkdir(info.versioned_dir, "p")
   local err = write(file, table.concat(lines, "\n") .. "\n")
   if err then
@@ -221,8 +289,9 @@ local function add_to_versioned(info, entry, r)
     return
   end
   if not exists then pcall(vim.uv.fs_chmod, file, tonumber("755", 8)) end
-  r.status = "installed"
-  r.message = ("added to %s (core.hooksPath = %s is versioned: review the change and commit it yourself)"):format(
+  r.status = found and "updated" or "installed"
+  r.message = ("%s %s (core.hooksPath = %s is versioned: review the change and commit it yourself)"):format(
+    found and "updated the line in" or "added to",
     file,
     info.hooks_path
   )
@@ -235,6 +304,11 @@ end
 ---@param r Gitsuite.Hooks.Result
 local function remove_from_versioned(info, entry, r)
   local file = info.versioned_dir .. "/" .. entry.hook
+  local why = refuse(file)
+  if why then
+    r.status, r.message = "error", why
+    return
+  end
   local text = read(file)
   if not text:find(entry.marker, 1, true) then
     r.status, r.message = "absent", "not in " .. file
@@ -280,6 +354,13 @@ function M.install(repo, ids, opts)
       local r = { repo = repo, id = e.id }
       if info.hooks_path_local and info.versioned_dir and opts and opts.into_versioned then
         add_to_versioned(info, e, r)
+      elseif info.hooks_path_local and not info.versioned_dir then
+        r.status = "manual"
+        r.message = (
+          "core.hooksPath = %s in this repository points outside its work tree: nothing was written "
+          .. "(not even with --into-versioned). Add this line to the %s hook there:"
+        ):format(info.hooks_path, e.hook)
+        r.snippet = snippet(e)
       elseif info.hooks_path_local then
         r.status = "manual"
         r.message = (

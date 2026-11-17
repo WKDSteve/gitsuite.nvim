@@ -234,7 +234,7 @@ there. By default gitsuite writes nothing in such a repository: the result is
 
 `--into-versioned` adds that line for you, to the hook file in that folder
 (for example `.husky/commit-msg`; created with a `#!/usr/bin/env sh` line if it
-is missing, otherwise appended, before a last `exec` line; with husky 9, whose
+is missing, otherwise appended, before a last `exec` or `exit` line; with husky 9, whose
 `core.hooksPath` is the generated `.husky/_`, the file in `.husky/`). It does nothing
 else: no commit and no change to the git config. The change shows up in
 `git status`; review it and commit it yourself, or leave it uncommitted. The
@@ -243,6 +243,12 @@ file exists, so on another machine or in another clone it does nothing. A
 failure of the script still stops the commit. `:Git hooks uninstall
 --into-versioned` takes the line out again, and removes a hook file that held
 nothing else.
+
+Run again, it reports `unchanged`; a line of an older install (the plugin moved,
+another machine) is replaced in place (`updated`). A hook file that is a symlink
+is never written through (`error`), and a `core.hooksPath` outside the work tree
+(a shared `~/hooks` folder) is not versioned with the repository: it stays
+`manual`, with or without the flag.
 
 ```vim
 :Git hooks install --repo=~/src/web-app --into-versioned

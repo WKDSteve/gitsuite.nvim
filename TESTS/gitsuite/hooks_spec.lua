@@ -246,6 +246,77 @@ describe("gitsuite.features.hooks", function()
       end
     )
 
+    it("puts the line before a last exit, as before a last exec", function()
+      local repo = husky_repo("v8")
+      write_file(repo .. "/.husky/commit-msg", "#!/bin/sh\nnpx commitlint --edit $1\nexit $?\n")
+      write_file(repo .. "/.husky/pre-commit", "#!/bin/sh\necho checking\nexit\n")
+      hooks.install(repo, nil, { into_versioned = true })
+      local msg = vim.split(read(repo .. "/.husky/commit-msg"), "\n", { plain = true })
+      assert.truthy(
+        msg[3]:find("# gitsuite-hook: no-claude-trailer", 1, true),
+        table.concat(msg, "\n")
+      )
+      assert.equals("exit $?", msg[4])
+      local pre = vim.split(read(repo .. "/.husky/pre-commit"), "\n", { plain = true })
+      assert.truthy(pre[3]:find("# gitsuite-hook: large-files", 1, true), table.concat(pre, "\n"))
+      assert.equals("exit", pre[4])
+    end)
+
+    it("replaces a line of an older install (another path to the script)", function()
+      local repo = husky_repo("v9")
+      local old = 'if [ -f "/old/place/x.sh" ]; then bash "/old/place/x.sh" "$@" || exit $?; fi   '
+        .. "# gitsuite-hook: no-claude-trailer"
+      write_file(repo .. "/.husky/commit-msg", "#!/bin/sh\n" .. old .. "\necho after\n")
+      local res = by_id(hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true }))
+      assert.equals("updated", res["no-claude-trailer"].status, res["no-claude-trailer"].message)
+      local lines = vim.split(read(repo .. "/.husky/commit-msg"), "\n", { plain = true })
+      assert.is_nil(table.concat(lines, "\n"):find("/old/place", 1, true))
+      assert.truthy(lines[2]:find("commit-msg-no-claude-trailer.sh", 1, true), "in the same place")
+      assert.equals("echo after", lines[3])
+      local again = by_id(hooks.install(repo, { "no-claude-trailer" }, { into_versioned = true }))
+      assert.equals("unchanged", again["no-claude-trailer"].status)
+    end)
+
+    it("never writes through a symlinked hook file", function()
+      local repo = husky_repo("v10")
+      local target = base .. "/outside-rc"
+      write_file(target, "echo mine\n")
+      if not vim.uv.fs_symlink(target, repo .. "/.husky/pre-commit") then
+        pending("no symlinks here (Windows without the right to create them)")
+        return
+      end
+      assert.is_true(vim.uv.fs_symlink(base .. "/nowhere", repo .. "/.husky/commit-msg") == true)
+      local res = by_id(hooks.install(repo, nil, { into_versioned = true }))
+      assert.equals("error", res["large-files"].status)
+      assert.truthy(res["large-files"].message:find("symlink", 1, true))
+      assert.equals("echo mine\n", read(target), "the target is untouched")
+      assert.equals("error", res["no-claude-trailer"].status, "a dangling one too")
+      assert.is_nil(vim.uv.fs_stat(base .. "/nowhere"), "nothing created at its target")
+      local gone = by_id(hooks.uninstall(repo, nil, { into_versioned = true }))
+      assert.equals("error", gone["large-files"].status)
+    end)
+
+    it(
+      "a core.hooksPath outside the work tree is not versioned: manual, even with the flag",
+      function()
+        local repo = new_repo("v11")
+        local shared = base .. "/shared-hooks"
+        vim.fn.mkdir(shared, "p")
+        git(repo, "config", "--local", "core.hooksPath", shared)
+        assert.is_nil(hooks.inspect(repo).versioned_dir)
+        local res = by_id(hooks.install(repo, nil, { into_versioned = true }))
+        assert.equals("manual", res["no-claude-trailer"].status)
+        assert.truthy(res["no-claude-trailer"].message:find("outside its work tree", 1, true))
+        assert.is_not_nil(res["no-claude-trailer"].snippet)
+        assert.is_nil(vim.uv.fs_stat(shared .. "/commit-msg"), "nothing written there")
+
+        local up = new_repo("v12")
+        vim.fn.mkdir(base .. "/up-hooks", "p")
+        git(up, "config", "--local", "core.hooksPath", "../up-hooks")
+        assert.is_nil(hooks.inspect(up).versioned_dir, "a relative path that leaves the work tree")
+      end
+    )
+
     it("a commit runs the line: the Claude trailer is gone", function()
       if vim.fn.executable("bash") == 0 then
         pending("bash not on PATH")
