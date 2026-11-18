@@ -97,9 +97,9 @@ local MAX_PARALLEL = 8
 ---@param repo string Absolute path to the repository
 ---@param args string[] Arguments after `git`
 ---@param on_done fun(res: Lib.Git.RunResult): nil
----@return nil
+---@return { stop: fun(self: any, signal?: string) } handle
 local function git_read(repo, args, on_done)
-  git.run_async(args, { dir = repo, timeout_ms = GIT_TIMEOUT_MS, read_only = true }, on_done)
+  return git.run_async(args, { dir = repo, timeout_ms = GIT_TIMEOUT_MS, read_only = true }, on_done)
 end
 
 ---Turns a failed `git` result into a one-line error message.
@@ -186,9 +186,9 @@ end
 ---error, since "no commits yet" is a legitimate state for a fresh clone target.
 ---@param repo string Absolute path to the repository
 ---@param on_done fun(ts: integer|nil): nil
----@return nil
+---@return { stop: fun(self: any, signal?: string) } handle
 local function last_commit_ts(repo, on_done)
-  git_read(repo, { "log", "-1", "--format=%ct" }, function(res)
+  return git_read(repo, { "log", "-1", "--format=%ct" }, function(res)
     if res.code ~= 0 then
       on_done(nil)
       return
@@ -204,7 +204,7 @@ end
 ---handed back once both have returned.
 ---@param repo string Absolute path to the repository
 ---@param on_done fun(record: RepoDashboardRecord|nil, err: string|nil): nil
----@return nil
+---@return { stop: fun(self: any, signal?: string) } handle Stops both git calls (the command line's `--timeout`)
 local function status_repo(repo, on_done)
   ---@type RepoDashboardRecord|nil
   local record
@@ -219,7 +219,7 @@ local function status_repo(repo, on_done)
     on_done(record, err)
   end
 
-  git_read(repo, { "status", "--porcelain=v2", "--branch" }, function(res)
+  local status_job = git_read(repo, { "status", "--porcelain=v2", "--branch" }, function(res)
     if res.code ~= 0 then
       err = failure_text(res, "git status")
     else
@@ -229,11 +229,20 @@ local function status_repo(repo, on_done)
     settle()
   end)
 
-  last_commit_ts(repo, function(value)
+  local ts_job = last_commit_ts(repo, function(value)
     ts = value
     got_ts = true
     settle()
   end)
+  return {
+    stop = function(_, signal)
+      for _, job in ipairs({ status_job, ts_job }) do
+        if type(job) == "table" and type(job.stop) == "function" then
+          pcall(job.stop, job, signal)
+        end
+      end
+    end,
+  }
 end
 
 ---Queries the git status of a single repository (no discovery, no progress
@@ -241,9 +250,9 @@ end
 ---rather than re-reading every repository in the directory.
 ---@param repo string Absolute path to the repository
 ---@param on_done fun(record: RepoDashboardRecord|nil, err: string|nil): nil
----@return nil
+---@return { stop: fun(self: any, signal?: string) } handle Stops both git calls
 function M.dashboard_one(repo, on_done)
-  status_repo(repo, on_done)
+  return status_repo(repo, on_done)
 end
 
 ---Collects a human-readable detail view of one repository: the porcelain

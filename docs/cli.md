@@ -26,11 +26,12 @@ not seen; the defaults apply.
 | --- | --- |
 | `status [<path>...] [--dir=<dir>]` | One entry per repository: the row `:Git dashboard` shows for it. Without arguments the repository of the current directory; a `<path>` inside a repository means that repository. `--dir`: every repository directly below `<dir>` (or `<dir>` itself when it is one), the same rule as `dashboard.base_dir`. Read one after another. |
 | `log [<path>] [--count=N] [--rev=<rev>] [--files]` | The newest `N` commits (default 20, at most 5000) reachable from `<rev>` (default `HEAD`); `--files` adds the changed files of each. |
-| `blame <file> [--line=N \| --lines=A-B]` | Who last changed each line of `<file>` (or of the given lines); a line changed in the work tree is `uncommitted`. |
+| `blame <file> [--line=N \| --lines=A-B]` | Who last changed each line of `<file>` (or of the given lines, at most line 1000000000); a line changed in the work tree is `uncommitted`. |
 | `breaking [<path>] --from=<rev> [--to=<rev>] [--max=N]` | The breaking-change check of `:Git plugins report` over the commits in `<to>` (default `HEAD`) that `<from>` does not have, at most `N` (default 1000, at most 20000). |
 | `help` | The usage, on stdout. |
 
-Options every command takes: `--timeout=<seconds>` (default 120; exceeded: exit 3) and `--format=json` (the only
+Options every command takes: `--timeout=<seconds>` (default 120; exceeded: the git it waits for is killed, with its
+process tree, and the run exits 3) and `--format=json` (the only
 format, and the default). `--` ends the options: a path after it may start with `--`. A `<rev>` is anything
 `git rev-parse` reads (`HEAD~3`, `v1.2.0`, `origin/main`, a short hash), never something starting with `-`.
 

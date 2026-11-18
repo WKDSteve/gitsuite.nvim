@@ -133,5 +133,37 @@ describe("gitsuite command line (scripts/gitsuite.lua)", function()
       ["fix: ?nderung"] = true,
     }, out)
     assert.equals("Ä ok", cli_mod.valid_utf8("Ä ok"))
+    -- an empty dict stays one: without its metatable it would encode as `[]`
+    assert.equals('{"files":{}}', vim.json.encode(cli_mod.valid_utf8({ files = vim.empty_dict() })))
+  end)
+
+  it("--lines has an upper bound, like --line", function()
+    local code, json, err = cli({ "blame", "a.txt", "--lines=1-99999999999" })
+    assert.equals(2, code, err)
+    assert.is_nil(json)
+    assert.truthy(err:find("--lines must be", 1, true), err)
+  end)
+
+  it("a timed-out run kills the git it waits for, then exits 3", function()
+    -- A blame whose git never answers: the stand-in returns a handle and records the stop.
+    local git = require("lib.nvim.git")
+    local orig = git.blame_porcelain_async
+    local stopped
+    git.blame_porcelain_async = function(_, _, on_done)
+      return {
+        stop = function(_, signal)
+          stopped = signal or "sigterm"
+          vim.schedule(function()
+            on_done(nil, "killed")
+          end)
+        end,
+      }
+    end
+    local ok, code =
+      pcall(require("gitsuite.cli").run, { "blame", repo .. "/a.txt", "--timeout=1" })
+    git.blame_porcelain_async = orig
+    assert.is_true(ok, tostring(code))
+    assert.equals(3, code)
+    assert.equals("sigkill", stopped, "the git of the timed-out run was not killed")
   end)
 end)

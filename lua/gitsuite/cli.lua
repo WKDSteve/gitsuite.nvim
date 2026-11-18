@@ -37,6 +37,9 @@ local BREAKING_MAX, BREAKING_LIMIT = 1000, 20000
 ---Default `--timeout`, seconds, for the whole run.
 local TIMEOUT_S = 120
 
+---Largest line number of `blame --line` / `--lines`: an integer in `blame -L`'s `%d`, never a float.
+local LINE_MAX = 1000000000
+
 local USAGE = [[
 usage: nvim --headless -u NONE -l scripts/gitsuite.lua <command> [options]
 
@@ -146,12 +149,18 @@ local deadline = 0
 ---Raised when the deadline passes; `M.run` turns it into exit 3.
 local TIMEOUT = {}
 
+---How long a timed-out run waits for the killed git to be reported gone before it exits anyway.
+local KILL_GRACE_MS = 2000
+
 ---Starts an asynchronous call and waits for its callback, at most until the run's deadline.
----@param start fun(done: fun(...)) Calls `done` with the results, once
+---
+---On the deadline the call's process is killed (`handle.stop`, the whole tree: `taskkill /T` on Windows) before the
+---run ends with exit 3: left running, a long `git log` or `blame` outlived the command line as an orphan.
+---@param start fun(done: fun(...)): { stop: fun(self: any, signal?: string) }|nil Calls `done` with the results, once; returns the job's handle where it has one
 ---@return any ...
 local function await(start)
   local results, finished = nil, false
-  start(function(...)
+  local handle = start(function(...)
     if finished then return end
     finished = true
     results = { n = select("#", ...), ... }
@@ -162,6 +171,13 @@ local function await(start)
       return finished
     end, 10))
   then
+    if type(handle) == "table" and type(handle.stop) == "function" then
+      pcall(handle.stop, handle, "sigkill")
+      -- the kill answers through the callback: let it land before the process exits
+      vim.wait(KILL_GRACE_MS, function()
+        return finished
+      end, 10)
+    end
     error(TIMEOUT, 0)
   end
   return unpack(results, 1, results.n)
@@ -203,7 +219,7 @@ local function resolve_rev(dir, rev)
   local ok, err = gitlog.check(args)
   if not ok then return nil, err end
   local res = await(function(done)
-    require("lib.nvim.git").run_async(
+    return require("lib.nvim.git").run_async(
       gitlog.argv(args),
       gitlog.opts(dir, { read_only = true }),
       done
@@ -263,7 +279,7 @@ local function cmd_status(args)
   -- One after another: two short processes each, and a folder of forty clones is no reason for forty at once.
   for _, path in ipairs(targets) do
     local record, err = await(function(done)
-      status.dashboard_one(path, done)
+      return status.dashboard_one(path, done)
     end)
     if record then
       repos[#repos + 1] = {
@@ -332,7 +348,7 @@ local function cmd_log(args)
   end
   local gitlog = require("gitsuite.features.plugins.gitlog")
   local entries, err = await(function(done)
-    require("lib.nvim.git").log_async(
+    return require("lib.nvim.git").log_async(
       hash,
       gitlog.opts(root, { max_count = count, name_status = with_files }),
       done
@@ -358,12 +374,14 @@ local function cmd_blame(args)
   local line, lines = args.opts.line, args.opts.lines
   if line ~= nil and lines ~= nil then usage_error("--line and --lines exclude each other") end
   if line ~= nil then
-    first = int_option(args, "line", 1, 1000000000)
+    first = int_option(args, "line", 1, LINE_MAX)
     last = first
   elseif lines ~= nil then
     local a, b = tostring(lines):match("^(%d+)%-(%d+)$")
     a, b = tonumber(a), tonumber(b)
-    if not a or not b or a < 1 or b < a then usage_error("--lines must be A-B with 1 <= A <= B") end
+    if not a or not b or a < 1 or b < a or b > LINE_MAX then
+      usage_error(("--lines must be A-B with 1 <= A <= B <= %d"):format(LINE_MAX))
+    end
     first, last = a, b
   end
 
@@ -376,16 +394,12 @@ local function cmd_blame(args)
   if not root then
     return { result = vim.NIL, errors = { { target = file, message = "not in a git repository" } } }
   end
-  -- Both resolved, so the file's path starts with its repository's -- unless a symlink or a case difference got in
-  -- between, which is told rather than cut at the wrong place.
-  if path:sub(1, #root + 1) ~= root .. "/" then
-    return { result = vim.NIL, errors = { { target = file, message = "not below " .. root } } }
-  end
+  -- `repo_root` found `root` as an ancestor of this very (resolved) path, so the path starts with it.
   local rel = path:sub(#root + 2)
 
   local git = require("lib.nvim.git")
   local entries, err = await(function(done)
-    git.blame_porcelain_async(rel, { dir = root, first = first, last = last }, done)
+    return git.blame_porcelain_async(rel, { dir = root, first = first, last = last }, done)
   end)
   if not entries then
     return { result = vim.NIL, errors = { { target = rel, message = err or "git blame failed" } } }
@@ -448,7 +462,7 @@ local function cmd_breaking(args)
   -- `from...to` with --left-right: only the `>` side is new in `to`; one more than `max` tells "cut off".
   local git = require("lib.nvim.git")
   local entries, err = await(function(done)
-    git.log_async(
+    return git.log_async(
       from .. "..." .. to,
       gitlog.opts(
         root,
@@ -477,7 +491,7 @@ local function cmd_breaking(args)
   end
 
   local recent = await(function(done)
-    git.log_async(to, gitlog.opts(root, { max_count = 100, no_merges = true }), done)
+    return git.log_async(to, gitlog.opts(root, { max_count = 100, no_merges = true }), done)
   end)
   local convention
   if recent then
@@ -576,7 +590,8 @@ function M.valid_utf8(value)
   for k, v in pairs(value) do
     out[M.valid_utf8(k)] = M.valid_utf8(v)
   end
-  return out
+  -- the metatable says what the JSON is: `vim.empty_dict()` encodes as `{}`, without it as `[]`
+  return setmetatable(out, getmetatable(value))
 end
 
 ---Writes one line to `stream`.
