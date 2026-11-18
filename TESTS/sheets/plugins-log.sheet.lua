@@ -6,7 +6,7 @@ return {
   id = "gitsuite.plugins-log",
   feature = "gitsuite.plugins-log",
   title = ":Git plugins log of a checkout as a buffer and as a picker",
-  task = "gitsuite.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
+  task = "gitsuite.nvim/live-test-checklist",
   sizes = { { rows = 40, cols = 120 } },
   steps = {
     {

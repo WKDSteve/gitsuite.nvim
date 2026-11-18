@@ -8,7 +8,7 @@ return {
   id = "gitsuite.cli",
   feature = "gitsuite.cli",
   title = "scripts/gitsuite.lua status, log, blame and breaking answer JSON on a real repository",
-  task = "gitsuite.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
+  task = "gitsuite.nvim/live-test-checklist",
   sizes = { { rows = 40, cols = 120 } },
   steps = {
     {

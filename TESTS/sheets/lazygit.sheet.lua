@@ -9,7 +9,7 @@ return {
   id = "gitsuite.lazygit",
   feature = "gitsuite.lazygit",
   title = ":Git ui lazygit starts lazygit -p <repository root> (stand-in), and the O/<C-o> commands",
-  task = "gitsuite.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
+  task = "gitsuite.nvim/live-test-checklist",
   sizes = { { rows = 40, cols = 120 } },
   fakes = { "lazygit" },
   steps = {

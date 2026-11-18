@@ -8,7 +8,7 @@ return {
   id = "gitsuite.dashboard-actions",
   feature = "gitsuite.dashboard",
   title = "gitsuite.nvim: the dashboard fetches, pulls, updates and syncs real clones (local remotes)",
-  task = "gitsuite.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
+  task = "gitsuite.nvim/live-test-checklist",
   engine = "rpc",
   sizes = { { rows = 30, cols = 120 } },
   steps = {

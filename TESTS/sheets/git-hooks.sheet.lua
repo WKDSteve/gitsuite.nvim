@@ -7,7 +7,7 @@ return {
   id = "gitsuite.hooks",
   feature = "gitsuite.hooks",
   title = ":Git hooks install, list and uninstall on a real repository, plain and with core.hooksPath",
-  task = "gitsuite.nvim/performance-pruefung-luecken-schliessen-katalog-feature-shee",
+  task = "gitsuite.nvim/live-test-checklist",
   sizes = { { rows = 40, cols = 120 } },
   steps = {
     {
