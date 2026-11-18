@@ -206,6 +206,17 @@ local function repo_root(path)
   return root and vim.fs.normalize(root) or nil
 end
 
+---`path` relative to the folder `root` it lies below, or nil when it does not. A root at the top of a drive or of
+---the file system ends in `/` already (`E:/`, `/`): its prefix is the root itself, not `root .. "/"`.
+---@param path string normalized, absolute
+---@param root string normalized, absolute
+---@return string|nil
+function M.relative(path, root)
+  local prefix = root:sub(-1) == "/" and root or (root .. "/")
+  if #path <= #prefix or path:sub(1, #prefix) ~= prefix then return nil end
+  return path:sub(#prefix + 1)
+end
+
 ---Resolves a revision the user typed (`HEAD`, `v1.2`, `main~3`, a short hash) to its full commit hash, read-only.
 ---@param dir string
 ---@param rev string
@@ -394,8 +405,10 @@ local function cmd_blame(args)
   if not root then
     return { result = vim.NIL, errors = { { target = file, message = "not in a git repository" } } }
   end
-  -- `repo_root` found `root` as an ancestor of this very (resolved) path, so the path starts with it.
-  local rel = path:sub(#root + 2)
+  local rel = M.relative(path, root)
+  if not rel then
+    return { result = vim.NIL, errors = { { target = file, message = "not below " .. root } } }
+  end
 
   local git = require("lib.nvim.git")
   local entries, err = await(function(done)

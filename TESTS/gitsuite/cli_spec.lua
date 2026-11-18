@@ -137,6 +137,24 @@ describe("gitsuite command line (scripts/gitsuite.lua)", function()
     assert.equals('{"files":{}}', vim.json.encode(cli_mod.valid_utf8({ files = vim.empty_dict() })))
   end)
 
+  it(
+    "a file's path relative to its repository, also for a repository at a drive or file-system root",
+    function()
+      local cli_mod = require("gitsuite.cli")
+      assert.equals("lua/a.lua", cli_mod.relative("E:/repos/x/lua/a.lua", "E:/repos/x"))
+      assert.equals("foo.lua", cli_mod.relative("E:/foo.lua", "E:/"))
+      assert.equals("foo.lua", cli_mod.relative("/foo.lua", "/"))
+      assert.is_nil(
+        cli_mod.relative("E:/repos/xy/a.lua", "E:/repos/x"),
+        "a sibling with the same prefix"
+      )
+      assert.is_nil(
+        cli_mod.relative("E:/repos/x", "E:/repos/x"),
+        "the root itself is no file below it"
+      )
+    end
+  )
+
   it("--lines has an upper bound, like --line", function()
     local code, json, err = cli({ "blame", "a.txt", "--lines=1-99999999999" })
     assert.equals(2, code, err)
