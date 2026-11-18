@@ -17,6 +17,17 @@ return {
       lua = [[dofile(vim.fn.getcwd() .. "/TESTS/sheets/_helpers.lua"); _G.boot()
       vim.fn.mkdir(_G.repo .. "/sub", "p")
       _G.calls = function() return require("testing.fake_programs").read(vim.env.TESTING_FAKES, "lazygit") end
+      -- no float left and no terminal whose job still runs
+      _G.closed = function()
+        for _, w in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_get_config(w).relative ~= "" then return false end
+        end
+        for _, b in ipairs(vim.api.nvim_list_bufs()) do
+          local job = vim.api.nvim_buf_is_valid(b) and vim.bo[b].buftype == "terminal" and vim.b[b].terminal_job_id
+          if job and vim.fn.jobwait({ job }, 0)[1] == -1 then return false end
+        end
+        return true
+      end
       _G.same = function(a, b)
         local function norm(p) return vim.fs.normalize(vim.uv.fs_realpath(p) or p):lower() end
         return norm(a) == norm(b)
@@ -37,12 +48,7 @@ return {
       note = "with -p and the repository root",
     },
     {
-      wait = [[(function()
-        for _, w in ipairs(vim.api.nvim_list_wins()) do
-          if vim.api.nvim_win_get_config(w).relative ~= "" then return false end
-        end
-        return true
-      end)()]],
+      wait = [[_G.closed()]],
       timeout = 10000,
       note = "the float closes when the program ends",
     },
@@ -51,6 +57,13 @@ return {
       wait = [[#_G.calls() == 2 and _G.same(_G.calls()[2].argv[2], _G.repo)]],
       timeout = 10000,
       note = "a subdirectory roots it at the repository that holds it",
+    },
+    {
+      -- Before the next commands open buffers: on Windows the child editor crashed now and then (0xC0000005)
+      -- when they ran while the terminal of the ending program was being closed.
+      wait = [[_G.closed()]],
+      timeout = 10000,
+      note = "its float closes too",
     },
     {
       lua = [[_G.write(_G.repo .. "/other.txt", { "other" }); _G.forget()
