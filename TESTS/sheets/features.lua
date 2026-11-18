@@ -58,25 +58,52 @@ return {
     id = "gitsuite.lazy-sync-hook",
     title = "Opt-in: after :Lazy sync the plugins report of the update follows on its own (plugins.after_sync)",
     docs = "docs/integrations.md",
+    perf = "user",
   },
   {
     id = "gitsuite.plugins-summary",
     title = "An optional AI summary of one plugin's update",
     docs = "docs/integrations.md",
+    perf = "manual:the summary is the user's own plugins.summarize hook (an AI provider with an account); gitsuite starts no process for it",
   },
   {
     id = "gitsuite.statusline",
     title = "A statusline component for lualine, heirline, the native statusline and ui.nvim",
     docs = "docs/statusline.md",
+    perf = "skip:starts no process: the component reads the buffer's conflict state and the branch gitsuite already knows",
   },
   {
     id = "gitsuite.context-menu",
     title = "Context-menu entries for the git actions: conflict resolution, blame, diff, hunks",
     docs = "docs/integrations.md",
+    perf = "skip:starts no process of its own: each entry runs the action its own sheet measures (conflict, blame, diff, hunk)",
   },
   {
     id = "gitsuite.config-check",
     title = "A rejected setup() option is dropped with a warning in :checkhealth gitsuite and the default stays",
     docs = "docs/health.md",
+    perf = "skip:starts no process: setup() validation and :checkhealth read the options only",
+  },
+  {
+    id = "gitsuite.plugins-fetch",
+    title = ":Git plugins report --mode=pending --fetch fetches every clone first, then reports what the next update brings",
+    docs = "docs/commands.md",
+    perf = "user",
+  },
+  {
+    id = "gitsuite.relink",
+    title = ":Git status relink offers to fix references to the files git status reports as renamed (filetree.nvim)",
+    docs = "docs/commands.md",
+    perf = "user",
+  },
+  {
+    id = "gitsuite.hooks",
+    title = ":Git hooks install, list and uninstall gitsuite's commit-msg and pre-commit hooks, also into core.hooksPath",
+    docs = "docs/commands.md",
+  },
+  {
+    id = "gitsuite.cli",
+    title = "scripts/gitsuite.lua status, log, blame and breaking answer JSON without a running editor",
+    docs = "docs/cli.md",
   },
 }

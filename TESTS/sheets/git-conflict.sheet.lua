@@ -1,11 +1,10 @@
--- Live check: `:Git diff ...` (diff.nvim) and `:Git conflict ...` on a real throwaway repository (task
--- gitsuite.nvim/testblatt-bindings-checkliste). Automated: diff head/last/rev/close/history and the key
--- <leader>dh; conflict refresh/next/prev and the five resolutions ours/theirs/both/none/base on a buffer
--- with conflict markers.
+-- Live check: `:Git conflict ...` on a real throwaway repository (task gitsuite.nvim/testblatt-bindings-checkliste).
+-- Automated: conflict refresh/next/prev and the five resolutions ours/theirs/both/none/base on a buffer with
+-- conflict markers. The `:Git diff ...` steps that were here are the sheet gitsuite.diff (git-diff.sheet.lua).
 return {
-  id = "gitsuite.diff-conflict",
+  id = "gitsuite.conflict",
   feature = "gitsuite.conflict",
-  title = ":Git diff and :Git conflict on a real repository",
+  title = ":Git conflict on a real repository",
   task = "gitsuite.nvim/testblatt-bindings-checkliste",
   sizes = { { rows = 40, cols = 120 } },
   requires = {
@@ -13,43 +12,8 @@ return {
   },
   steps = {
     { lua = [[dofile(vim.fn.getcwd() .. "/TESTS/sheets/_helpers.lua"); _G.boot()]] },
-    { keys = ":Git diff head<CR>" },
     {
-      wait = [[vim.api.nvim_buf_get_name(0):find("[Diff:target] git:HEAD", 1, true) ~= nil]],
-      note = "diff head opens the file against HEAD",
-    },
-    { keys = ":Git diff close<CR>" },
-    {
-      wait = [[vim.api.nvim_buf_get_name(0):find("notes.txt", 1, true) ~= nil and not vim.wo.diff]],
-      note = "diff close leaves diff mode",
-    },
-    { keys = ":Git diff last<CR>" },
-    {
-      wait = [[vim.api.nvim_buf_get_name(0):find("git:HEAD~1", 1, true) ~= nil]],
-      note = "diff last is against the previous commit",
-    },
-    { keys = ":Git diff close<CR>" },
-    { keys = ":Git diff rev HEAD~1<CR>" },
-    {
-      wait = [[vim.api.nvim_buf_get_name(0):find("git:HEAD~1", 1, true) ~= nil]],
-      note = "diff rev takes a revision",
-    },
-    { keys = ":Git diff close<CR>" },
-    { keys = ":Git diff history<CR>" },
-    {
-      wait = [[_G.floattext():find("second", 1, true) and _G.floattext():find("first", 1, true)]],
-      note = "diff history lists both commits",
-    },
-    { keys = "<Esc>" },
-    {
-      lua = [[vim.cmd("only!"); vim.cmd("edit! " .. vim.fn.fnameescape(_G.repo .. "/notes.txt"))]],
-    },
-    { keys = [[\dh]] },
-    { wait = [[_G.floattext():find("second", 1, true)]], note = "<leader>dh is diff history" },
-    { keys = "<Esc>" },
-    {
-      lua = [[vim.cmd("only!"); vim.cmd("edit! " .. vim.fn.fnameescape(_G.repo .. "/notes.txt"))
-      _G.conflict = function()
+      lua = [[_G.conflict = function()
         vim.api.nvim_buf_set_lines(0, 0, -1, false, { "one", "<<<<<<< HEAD", "a", "=======", "b", ">>>>>>> topic", "three" })
         vim.cmd("Git conflict refresh")
         vim.api.nvim_win_set_cursor(0, { 3, 0 })

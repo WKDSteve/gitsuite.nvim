@@ -1,14 +1,14 @@
 -- Live check: the `:Git` commands that need an optional plugin, on a real throwaway repository (task
--- gitsuite.nvim/testblatt-bindings-checkliste). TESTS/sheets/minit-extra.lua puts open.nvim, insights.nvim
--- and gitsigns.nvim on the runtimepath when it finds them; without one of them (or without ripgrep) the
--- sheet is a reported skip, never a failure.
--- Automated: browse file/repo/selection (open.nvim's browser dispatch is a recorder: the URL is what
--- counts), status todos (insights.nvim), conflict list on a real merge conflict, hunk preview/inline/
--- stage/reset (gitsigns.nvim, the staged result is read back with `git diff --cached`).
+-- gitsuite.nvim/testblatt-bindings-checkliste). TESTS/sheets/minit-extra.lua puts insights.nvim and
+-- gitsigns.nvim on the runtimepath when it finds them; without one of them (or without ripgrep) the sheet is
+-- a reported skip, never a failure.
+-- Automated: status todos (insights.nvim), conflict list on a real merge conflict, hunk preview/inline/
+-- stage/reset (gitsigns.nvim, the staged result is read back with `git diff --cached`). `:Git browse`
+-- (open.nvim) is the sheet gitsuite.browse (git-browse.sheet.lua).
 return {
   id = "gitsuite.optional",
   feature = "gitsuite.adapters",
-  title = ":Git browse, status todos, conflict list and hunk with the optional plugins",
+  title = ":Git status todos, conflict list and hunk with the optional plugins",
   task = "gitsuite.nvim/testblatt-bindings-checkliste",
   minit = "TESTS/sheets/minit-extra.lua",
   sizes = { { rows = 40, cols = 120 } },
@@ -18,7 +18,6 @@ return {
       lua = [[vim.fn.executable("rg") == 1]],
       reason = "ripgrep is not installed (insights.nvim scans with it)",
     },
-    { lua = [[pcall(require, "open.registry")]], reason = "open.nvim is not on the runtimepath" },
     {
       lua = [[pcall(require, "insights.todos")]],
       reason = "insights.nvim is not on the runtimepath",
@@ -26,30 +25,7 @@ return {
     { lua = [[pcall(require, "gitsigns")]], reason = "gitsigns.nvim is not on the runtimepath" },
   },
   steps = {
-    {
-      lua = [[dofile(vim.fn.getcwd() .. "/TESTS/sheets/_helpers.lua"); _G.boot()
-      require("open.registry").dispatch = function(kind, ctx)
-        _G.opened[#_G.opened + 1] = kind .. ":" .. ctx.text
-        return true
-      end]],
-    },
-    { keys = ":Git browse file<CR>" },
-    {
-      expect = [[_G.opened[1] == "browser:https://github.com/me/proj/blob/main/notes.txt"]],
-      note = "browse file opens the file on its web host",
-    },
-    { lua = [[_G.forget()]] },
-    { keys = ":Git browse repo<CR>" },
-    {
-      expect = [[_G.opened[1] == "browser:https://github.com/me/proj"]],
-      note = "browse repo opens the root",
-    },
-    { lua = [[_G.forget(); vim.cmd("normal! Vj\27")]] },
-    { keys = ":Git browse selection<CR>" },
-    {
-      expect = [[_G.opened[1] == "browser:https://github.com/me/proj/blob/main/notes.txt#L1-L2"]],
-      note = "browse selection carries the line range",
-    },
+    { lua = [[dofile(vim.fn.getcwd() .. "/TESTS/sheets/_helpers.lua"); _G.boot()]] },
     {
       lua = [[_G.write(_G.repo .. "/notes.txt", { "one", "two changed", "three", "TODO fix me" }); vim.cmd("edit!")]],
     },
@@ -132,6 +108,5 @@ return {
   manual = {
     ":Git hunk stage-buffer, reset-buffer and toggle-deleted",
     ":Git status lint, spell and relink",
-    ":Git browse in a real browser",
   },
 }
