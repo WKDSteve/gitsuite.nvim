@@ -45,6 +45,24 @@ describe("gitsuite.features.conflict", function()
       package.loaded["color_my_ascii.api.fences"] = real_fences
     end)
 
+    it("a buffer without markers never requires color_my_ascii.nvim", function()
+      package.loaded["color_my_ascii.api.fences"] = nil
+      local required = false
+      local saved_preload = package.preload["color_my_ascii.api.fences"]
+      package.preload["color_my_ascii.api.fences"] = function()
+        required = true
+        return { block_at = function() end }
+      end
+      set_lines({ "just", "ordinary", "lines" })
+      local ok_scan, has = pcall(conflict.has_conflicts, bufnr)
+      package.preload["color_my_ascii.api.fences"] = saved_preload
+      package.loaded["color_my_ascii.api.fences"] = nil
+      assert.is_true(ok_scan)
+      assert.is_false(has)
+      -- lazy.nvim loads the whole plugin on that require (~30 ms per file opened)
+      assert.is_false(required)
+    end)
+
     it("without color_my_ascii.nvim: a fenced-looking conflict still counts", function()
       package.loaded["color_my_ascii.api.fences"] = nil
       set_lines({ "<<<<<<< HEAD", "ours", "=======", "theirs", ">>>>>>> branch" })

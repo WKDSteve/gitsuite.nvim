@@ -25,6 +25,9 @@ local NS = vim.api.nvim_create_namespace("gitsuite_conflict")
 ---@param regions GitSuite.Conflict.Region[]
 ---@return GitSuite.Conflict.Region[]
 local function filter_fenced(bufnr, regions)
+  -- Nothing to filter in the common case: the `require` below lets lazy.nvim load all of
+  -- color_my_ascii (~30 ms) on every BufReadPost of a file without a single marker.
+  if #regions == 0 then return regions end
   local ok, fences = pcall(require, "color_my_ascii.api.fences")
   if not ok then return regions end
 
