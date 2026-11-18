@@ -101,7 +101,7 @@ jobs:
           repository: WKDSteve/ui.nvim
           path: .deps/ui.nvim
           ref: ci-verified
-      # only the test sheet git-optional loads it (:Git browse)
+      # only the test sheet git-browse loads it (:Git browse)
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false

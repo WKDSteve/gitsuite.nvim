@@ -117,7 +117,7 @@ return {
       platform = { "suite", "conformance" },
       -- `testing ci land`: a check branch ci/** runs the hosted legs, main moves to a commit only once it is green there
       land = true,
-      -- the optional plugins the test sheet git-optional loads (TESTS/sheets/minit-extra.lua finds them below .deps/);
+      -- the optional plugins the test sheets git-optional and git-browse load (TESTS/sheets/minit-extra.lua finds them below .deps/);
       -- without them, or without ripgrep, it is a reported skip. open.nvim and insights.nvim come from their
       -- ci-verified branch, like the fleet's own dependencies; a change there that moves the sheet's snapshots shows
       -- up as a red sheet here, not as a silent drift.
@@ -125,7 +125,7 @@ return {
         {
           repo = "WKDSteve/open.nvim",
           ref = "ci-verified",
-          why = "only the test sheet git-optional loads it (:Git browse)",
+          why = "only the test sheet git-browse loads it (:Git browse)",
         },
         {
           repo = "WKDSteve/insights.nvim",
