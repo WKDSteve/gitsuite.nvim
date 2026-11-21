@@ -94,10 +94,12 @@ function M.show(dir, output, out_path)
     stream = {
       -- Guarded: a raise here would stop the scan before its callback, so the
       -- open fetch queue would never be closed and would block `gf` for good.
-      on_discover = live and function(...)
-        local ok, err = pcall(view.live_discover, ...)
-        if not ok then notify("dashboard: " .. tostring(err), vim.log.levels.WARN) end
-      end or nil,
+      on_discover = live
+          and function(...)
+            local ok, err = pcall(view.live_discover, ...)
+            if not ok then notify("dashboard: " .. tostring(err), vim.log.levels.WARN) end
+          end
+        or nil,
       on_record = function(path, record, err)
         if live then
           local ok, live_err = pcall(view.live_record, path, record, err)
