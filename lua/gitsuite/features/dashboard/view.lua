@@ -2494,6 +2494,24 @@ local FETCH_ON_OPEN_STOP_AFTER = 3
 ---transport. Once the scan is through, `dashboard.fetch_jobs` as for `gf`.
 local FETCH_ON_OPEN_WHILE_SCANNING = 1
 
+---Cancels `feeder` once the dashboard is closed (its window left or its buffer
+---wiped): fetch on open belongs to the table it fills, so nothing further is
+---started and no result popup follows. Fetches already running end by themselves.
+---@private
+---@param feeder GitSuiteBulkFeeder
+---@return nil
+local function _watch_close_for(feeder)
+  local group = vim.api.nvim_create_augroup("GitSuiteDashboardFetchOnOpen", { clear = true })
+  vim.api.nvim_create_autocmd({ "BufWinLeave", "BufWipeout" }, {
+    group = group,
+    callback = function(args)
+      if vim.bo[args.buf].filetype ~= "gitsuite-dashboard" then return end
+      pcall(feeder.cancel)
+      pcall(vim.api.nvim_del_augroup_by_name, "GitSuiteDashboardFetchOnOpen")
+    end,
+  })
+end
+
 ---Starts fetch on open (`dashboard.fetch_on_open`): an open fetch queue the scan
 ---feeds, one repository at a time as its row is read, so fetching starts while
 ---the rest of the page is still being read instead of after a separate `gf`.
@@ -2510,7 +2528,7 @@ local FETCH_ON_OPEN_WHILE_SCANNING = 1
 function M.fetch_pipeline()
   if repo_state.bulk_verb() or _page_switching then return nil end
   local cfg = require("gitsuite.config").get().dashboard
-  return bulk.run({
+  local feeder = bulk.run({
     verb = "fetch",
     targets = {},
     open = true,
@@ -2533,7 +2551,8 @@ function M.fetch_pipeline()
     end,
     handle = progress.create("fetch on open", 0),
     on_finish = function(results, ended)
-      if #results == 0 then return end
+      -- The dashboard was closed meanwhile: a result popup would come out of nowhere.
+      if ended.abandoned or #results == 0 then return end
       local message, any_failed = bulk_report.format("fetch", results, #results)
       if ended.stopped then
         notify(
@@ -2550,6 +2569,8 @@ function M.fetch_pipeline()
       end
     end,
   })
+  if feeder then _watch_close_for(feeder) end
+  return feeder
 end
 
 ---Marks the start of a scan: hand the value to `M.show` as `reread_since`, and

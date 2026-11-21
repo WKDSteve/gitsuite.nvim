@@ -361,7 +361,7 @@ describe("gitsuite.features.dashboard.bulk", function()
         return run.results ~= nil
       end)
       assert.same({ "a", "b", "c", "d" }, names_of(run.results))
-      assert.same({ cancelled = false, stopped = false }, run.ended)
+      assert.same({ cancelled = false, stopped = false, abandoned = false }, run.ended)
       assert.is_nil(state.bulk_verb())
     end)
 
@@ -403,6 +403,26 @@ describe("gitsuite.features.dashboard.bulk", function()
       assert.is_false(run.feeder.push(target("a")))
     end)
 
+    it(
+      "cancel by the owner stops further starts, lets the running one end, reports abandoned",
+      function()
+        start({}, { open = true })
+        run.feeder.push(target("a"))
+        run.feeder.push(target("b"))
+        assert.same({ "/a" }, run.started)
+        run.feeder.cancel()
+        assert.is_nil(run.results, "the fetch in flight is not killed")
+        complete("/a")
+        until_(function()
+          return run.results ~= nil
+        end)
+        assert.same({ "/a" }, run.started, "b never started")
+        assert.is_true(run.ended.abandoned)
+        assert.is_true(run.ended.cancelled)
+        assert.is_false(run.feeder.push(target("c")))
+      end
+    )
+
     it("takes a path only once", function()
       start({}, { open = true })
       assert.is_true(run.feeder.push(target("a")))
@@ -439,7 +459,7 @@ describe("gitsuite.features.dashboard.bulk", function()
         return run.results ~= nil
       end)
       assert.same({ "a", "b", "c" }, names_of(run.results))
-      assert.same({ cancelled = true, stopped = true }, run.ended)
+      assert.same({ cancelled = true, stopped = true, abandoned = false }, run.ended)
       assert.is_nil(state.bulk_verb())
     end)
 

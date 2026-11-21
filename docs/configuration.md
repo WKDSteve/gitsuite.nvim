@@ -168,6 +168,9 @@ opening a panel should not reach the network unasked. What it does not do:
   `--out=clipboard` or `--out=path`, and never `<C-l>`/`<C-h>` or `R`;
 - a dashboard opened again while its fetch on open (or any batch) still runs
   shows that one and does not queue a second;
+- closing the dashboard (its window or buffer) cancels it: nothing further is
+  fetched, the fetches already running end by themselves, and no result
+  summary appears afterwards;
 - when the first three fetches all fail with none through (no network, no
   access), it stops instead of waiting out one timeout per repository, and
   says so once. Each fetch never prompts for credentials (`GIT_TERMINAL_PROMPT=0`)

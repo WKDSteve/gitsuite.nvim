@@ -688,6 +688,28 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
     assert.equals(1, max_total)
   end)
 
+  -- Fetch on open belongs to the table it fills: closing the dashboard cancels it.
+  it("closing the dashboard cancels fetch on open: nothing further starts, no summary", function()
+    actions.fetch = fake("fetch")
+    view.show({ record("r1"), record("r2") }, { output = "buffer" })
+    local feeder = view.fetch_pipeline()
+    assert.is_not_nil(feeder)
+    feeder.push({ path = "/fake/r1", name = "r1" })
+    feeder.push({ path = "/fake/r2", name = "r2" })
+    feeder.close()
+    wait_for(function()
+      return waiting["fetch /fake/r1"] ~= nil
+    end, "r1 fetching")
+
+    vim.api.nvim_buf_delete(bufnr(), { force = true })
+    release("fetch /fake/r1", true)
+    wait_for(function()
+      return state.bulk_verb() == nil
+    end, "the queue to end")
+    assert.same({ "fetch /fake/r1" }, calls, "r2 never started")
+    assert.is_nil(last_message():find("fetch", 1, true), "no result summary: " .. last_message())
+  end)
+
   -- GS: gitsuite.nvim/dashboard-zweiter-lauf-haengt -- close the dashboard while
   -- a batch still runs, open it again (a fresh scan, a fresh buffer): the new
   -- dashboard takes the running batch over instead of starting a second one,

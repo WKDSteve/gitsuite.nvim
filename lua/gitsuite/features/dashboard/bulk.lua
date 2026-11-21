@@ -31,11 +31,13 @@ local notify = require("gitsuite.util.notify").notify
 ---@class GitSuiteBulkFeeder
 ---@field push fun(target: GitSuiteBulkTarget): boolean Queues one more target; false once the queue is closed, stopped or finished, or when it holds that path already
 ---@field close fun(): nil No more targets: the walk ends once the queued ones are through
+---@field cancel fun(): nil The owner lets go of the walk (its dashboard was closed): nothing further starts, the ones in flight end, and `on_finish` hears `abandoned`
 
 ---How the walk ended, the second argument of `on_finish`.
 ---@class GitSuiteBulkEnd
 ---@field cancelled boolean Through the progress handle
 ---@field stopped boolean By `stop_after_failures`
+---@field abandoned boolean By the feeder's `cancel`: nobody is looking at the result any more
 
 ---@class GitSuiteDashboardBulk
 local M = {}
@@ -106,16 +108,18 @@ function M.run(opts)
   local generation = repo_state.begin_bulk(verb, paths)
   redraw()
 
-  local cancelled, stopped = false, false
+  local cancelled, stopped, abandoned = false, false, false
   local pump
-  if handle then guarded(handle.on_cancel, handle, function()
-    cancelled = true
-    -- Pumped as well: with nothing in flight (an open queue waiting for the
-    -- scan) no slot is ever given back, so only this call can end the walk.
-    vim.schedule(function()
-      if pump then pump() end
+  if handle then
+    guarded(handle.on_cancel, handle, function()
+      cancelled = true
+      -- Pumped as well: with nothing in flight (an open queue waiting for the
+      -- scan) no slot is ever given back, so only this call can end the walk.
+      vim.schedule(function()
+        if pump then pump() end
+      end)
     end)
-  end) end
+  end
 
   -- Filled per position in `targets`, so the summary lists repositories in
   -- row order whichever of the parallel ones finished first.
@@ -143,7 +147,7 @@ function M.run(opts)
     for pos = 1, #targets do
       if results[pos] then ordered[#ordered + 1] = results[pos] end
     end
-    opts.on_finish(ordered, { cancelled = cancelled, stopped = stopped })
+    opts.on_finish(ordered, { cancelled = cancelled, stopped = stopped, abandoned = abandoned })
   end
 
   local function launch(target, pos)
@@ -249,6 +253,11 @@ function M.run(opts)
     close = function()
       if closed then return end
       closed = true
+      pump()
+    end,
+    cancel = function()
+      if finished or cancelled then return end
+      cancelled, abandoned = true, true
       pump()
     end,
   }
