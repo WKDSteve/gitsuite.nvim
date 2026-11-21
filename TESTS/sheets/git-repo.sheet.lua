@@ -16,14 +16,14 @@ return {
   steps = {
     { lua = [[dofile(vim.fn.getcwd() .. "/TESTS/sheets/_helpers.lua"); _G.boot()]] },
     { keys = ":Git branch current<CR>" },
-    { expect = [[_G.noted("branch: main")]], note = "the current branch" },
+    { wait = [[_G.noted("branch: main")]], note = "the current branch" },
     { lua = [[_G.forget()]] },
     { keys = ":Git branch list<CR>" },
-    { expect = [[_G.noted("main") and _G.noted("topic")]], note = "both local branches" },
+    { wait = [[_G.noted("main") and _G.noted("topic")]], note = "both local branches" },
     { lua = [[_G.git(_G.repo, "checkout", "-q", "--detach"); _G.forget()]] },
     { keys = ":Git branch current<CR>" },
     {
-      expect = [[_G.noted("branch: detached HEAD @ ")]],
+      wait = [[_G.noted("branch: detached HEAD @ ")]],
       note = "on a detached HEAD it names the short hash",
     },
     { lua = [[_G.git(_G.repo, "checkout", "-q", "main"); _G.forget()]] },

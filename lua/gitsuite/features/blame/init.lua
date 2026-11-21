@@ -101,16 +101,20 @@ function M.line()
     return
   end
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  local entry, err = M.for_location(dir, path, lnum)
-  if err then
-    notify.error("blame: " .. err)
-    return
-  end
-  if not entry then
-    notify.info("blame: no data for this line")
-    return
-  end
-  notify.info(format_entry(entry))
+  -- In the background: `git blame` used to block until it answered.
+  M.for_location(dir, path, lnum, function(entry, err)
+    vim.schedule(function()
+      if err then
+        notify.error("blame: " .. err)
+        return
+      end
+      if not entry then
+        notify.info("blame: no data for this line")
+        return
+      end
+      notify.info(format_entry(entry))
+    end)
+  end)
 end
 
 ---Toggle a persistent current-line blame virtual text, refreshed on cursor
@@ -199,18 +203,37 @@ function M.full()
     notify.error("blame: buffer has no file")
     return
   end
-  local entries, err = git.blame_porcelain(path, { dir = dir })
-  if not entries then
-    notify.error("blame: " .. (err or "git blame failed"))
-    return
-  end
+  -- In the background: `git blame` of a whole file used to block until it answered.
+  -- The split opens once it does, next to the window it was asked from -- unless that
+  -- window is gone or shows another buffer by then, or a newer :Git blame full won.
+  local src_win = vim.api.nvim_get_current_win()
+  local valid = require("gitsuite.util.gitq").ticket("blame.full")
+  git.blame_porcelain_async(path, { dir = dir }, function(entries, err)
+    vim.schedule(function()
+      if not valid() then return end
+      if not entries then
+        notify.error("blame: " .. (err or "git blame failed"))
+        return
+      end
+      if not vim.api.nvim_win_is_valid(src_win) or vim.api.nvim_win_get_buf(src_win) ~= bufnr then
+        return
+      end
+      vim.api.nvim_set_current_win(src_win)
+      M._open_full(entries, src_win)
+    end)
+  end)
+end
 
+---@internal
+---The scroll-synced blame split for `entries`, left of `src_win` (the current window).
+---@param entries Lib.Git.BlameEntry[]
+---@param src_win integer
+function M._open_full(entries, src_win)
   local lines = {}
   for _, entry in ipairs(entries) do
     lines[#lines + 1] = format_entry(entry)
   end
 
-  local src_win = vim.api.nvim_get_current_win()
   local blame_bufnr, blame_win = require("lib.nvim.window.open_scratch_split")(
     lines,
     { split = "left", filetype = "gitsuite-blame" }

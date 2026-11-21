@@ -21,38 +21,76 @@
 --- bookkeeping, this module only calls `save(nil)`/`load(nil)` either side
 --- of the checkout that moves HEAD.
 
-local git = require("lib.nvim.git")
+local gitq = require("gitsuite.util.gitq")
 local notify = require("gitsuite.util.notify")
 
 local M = {}
 
 ---@internal
----@return string[]
-local function local_branches()
-  return git.refs(nil, { branches = true, remotes = false, tags = false })
+---The local branches, newest first, and which one HEAD is on (nil when detached), from
+---one `for-each-ref` in the background: `%(HEAD)` marks the current branch with `*`.
+---It used to be `for-each-ref` plus `symbolic-ref`, both synchronous.
+---@param done fun(branches: string[], current: string|nil, res: Lib.Git.RunResult)
+local function local_branches(done)
+  gitq.run(
+    {
+      "for-each-ref",
+      "--sort=-creatordate",
+      "--format=%(HEAD)%(refname:short)",
+      "refs/heads/",
+    },
+    nil,
+    function(res)
+      local branches, current = {}, nil
+      if res.code == 0 then
+        for line in (res.stdout or ""):gmatch("[^\r\n]+") do
+          local mark, name = line:sub(1, 1), line:sub(2)
+          if name ~= "" then
+            branches[#branches + 1] = name
+            if mark == "*" then current = name end
+          end
+        end
+      end
+      done(branches, current, res)
+    end
+  )
 end
 
 ---List local branches.
 ---@return nil
 function M.list()
-  local branches = local_branches()
-  if #branches == 0 then
-    notify.info("branch: no local branches (not a repo, git not on $PATH, or no commits yet)")
-    return
-  end
-  notify.info(table.concat(branches, "\n"))
+  local_branches(function(branches)
+    if #branches == 0 then
+      notify.info("branch: no local branches (not a repo, git not on $PATH, or no commits yet)")
+      return
+    end
+    notify.info(table.concat(branches, "\n"))
+  end)
 end
 
----Show the current branch (or the short commit hash in detached HEAD).
+---Show the current branch (or the short commit hash in detached HEAD), from one
+---`git log -1 --format=%h%x00%D` in the background: `%D` names the branch as
+---`HEAD -> <branch>` unless HEAD is detached. A repository without commits has no log;
+---its branch then comes from `symbolic-ref`.
 ---@return nil
 function M.current()
-  local name = git.current_branch()
-  if name then
-    notify.info("branch: " .. name)
-    return
-  end
-  local hash = git.head_short_hash()
-  notify.info("branch: detached HEAD" .. (hash and (" @ " .. hash) or ""))
+  gitq.run({ "log", "-1", "--format=%h%x00%D" }, nil, function(res)
+    local line = gitq.line(res)
+    if line then
+      local hash, decorations = line:match("^([^%z]*)%z(.*)$")
+      local name = decorations and decorations:match("HEAD %-> ([^,]+)")
+      if name then
+        notify.info("branch: " .. vim.trim(name))
+      else
+        notify.info("branch: detached HEAD" .. ((hash and hash ~= "") and (" @ " .. hash) or ""))
+      end
+      return
+    end
+    gitq.run({ "symbolic-ref", "--short", "-q", "HEAD" }, nil, function(sym)
+      local name = gitq.line(sym)
+      notify.info(name and ("branch: " .. name) or "branch: detached HEAD")
+    end)
+  end)
 end
 
 ---@internal
@@ -79,26 +117,40 @@ local function checkout(choice, current)
   local sessions_enabled = require("gitsuite.config").get().branch.sessions
   if sessions_enabled then sessions_core("save") end
 
-  -- git.checkout (GS-15) uses run_blocking, not run_blocking_captured -- the
-  -- old code here only ever saw stdout on failure (empty for a checkout
-  -- error, which git writes to stderr), so this actually gains git's real
-  -- reason instead of losing it.
-  local ok, err = git.checkout(choice)
-  if not ok then
-    notify.error(("branch: git checkout %s failed: %s"):format(choice, err))
+  -- A leading `-` would make git read the choice as an option: refused, like
+  -- lib.nvim.git.checkout does.
+  if choice:sub(1, 1) == "-" then
+    notify.error(("branch: git checkout: invalid revision %s"):format(vim.inspect(choice)))
     return
   end
-  notify.info("branch: switched to " .. choice)
 
-  local dir = git.repo_root()
-  if dir then require("gitsuite.events").branch_switched(dir, choice) end
+  -- In the background (it used to block for the whole checkout); git's own
+  -- reason on failure comes from stderr.
+  gitq.run({ "checkout", choice }, nil, function(res)
+    if res.code ~= 0 then
+      local why = vim.trim(res.stderr or "")
+      notify.error(
+        ("branch: git checkout %s failed: %s"):format(
+          choice,
+          gitq.failure(res, why ~= "" and why or "git checkout failed")
+        )
+      )
+      return
+    end
+    notify.info("branch: switched to " .. choice)
 
-  -- ...then load the TARGET branch's layout, now that HEAD has actually
-  -- moved and sessions.nvim's own resolve_name() sees the new branch.
-  -- Loading can discard unsaved buffers -- sessions.nvim's own call, this
-  -- module has no say in it -- which is exactly why this whole feature
-  -- stays opt-in.
-  if sessions_enabled then sessions_core("load") end
+    gitq.run({ "rev-parse", "--show-toplevel" }, nil, function(top)
+      local dir = gitq.line(top)
+      if dir then require("gitsuite.events").branch_switched(dir, choice) end
+
+      -- ...then load the TARGET branch's layout, now that HEAD has actually
+      -- moved and sessions.nvim's own resolve_name() sees the new branch.
+      -- Loading can discard unsaved buffers -- sessions.nvim's own call, this
+      -- module has no say in it -- which is exactly why this whole feature
+      -- stays opt-in.
+      if sessions_enabled then sessions_core("load") end
+    end)
+  end)
 end
 
 ---Switch to another local branch, picked via pickers.nvim's `git_branches`
@@ -107,12 +159,25 @@ end
 ---knows pickers.nvim exists).
 ---@return nil
 function M.switch()
-  local branches = local_branches()
+  -- The list and the current branch come from one query in the background; the
+  -- picker opens once it answers. A newer :Git branch switch wins: the answer of an
+  -- older one opens nothing.
+  local valid = gitq.ticket("branch.switch")
+  local_branches(function(branches, current)
+    if not valid() then return end
+    M._offer(branches, current)
+  end)
+end
+
+---@internal
+---Offer `branches` for a switch away from `current` (the picker, else vim.ui.select).
+---@param branches string[]
+---@param current string|nil
+function M._offer(branches, current)
   if #branches == 0 then
     notify.error("branch: no local branches to switch to")
     return
   end
-  local current = git.current_branch()
   local is_local = {}
   for _, b in ipairs(branches) do
     is_local[b] = true

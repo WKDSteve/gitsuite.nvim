@@ -87,6 +87,10 @@ describe("gitsuite.features.blame", function()
     local expected = #vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
     blame.full()
+    -- git blame runs in the background; the split opens when it answers
+    vim.wait(10000, function()
+      return vim.api.nvim_get_current_win() ~= src_win
+    end, 10)
 
     local blame_win = vim.api.nvim_get_current_win()
     assert.are_not.equal(src_win, blame_win, "full() opens a new window, not the source one")
@@ -254,10 +258,18 @@ describe("gitsuite.features.blame.for_location", function()
     editor_scope.open_file(repo .. "/sub dir/a b.txt")
     local bufnr = vim.api.nvim_get_current_buf()
 
+    -- git blame runs in the background: each line is said when it answers, so wait for one
+    -- before asking the next (two in flight could answer in either order)
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
     blame.line()
+    vim.wait(10000, function()
+      return #notes >= 1
+    end, 10)
     vim.api.nvim_win_set_cursor(0, { 3, 0 })
     blame.line()
+    vim.wait(10000, function()
+      return #notes >= 2
+    end, 10)
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
 
     assert.equals(2, #notes)

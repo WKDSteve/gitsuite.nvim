@@ -118,6 +118,8 @@ describe("gitsuite.features.branch", function()
     end
 
     local ok = pcall(branch.switch)
+    -- the list comes from git in the background; the choice and the checkout follow its answer
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle, 10), "git still busy")
 
     vim.ui.select = original_select
     assert.is_true(ok)
@@ -137,6 +139,8 @@ describe("gitsuite.features.branch", function()
     end
 
     local ok = pcall(branch.switch)
+    -- the list comes from git in the background; the choice and the checkout follow its answer
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle, 10), "git still busy")
     vim.ui.select = original_select
 
     assert.is_true(ok)
@@ -166,6 +170,8 @@ describe("gitsuite.features.branch", function()
     end
 
     local ok = pcall(branch.switch)
+    -- the list comes from git in the background; the choice and the checkout follow its answer
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle, 10), "git still busy")
 
     vim.ui.select = original_select
     vim.api.nvim_del_augroup_by_id(group)
@@ -205,6 +211,8 @@ describe("gitsuite.features.branch", function()
       end
 
       local ok = pcall(branch.switch)
+      -- the list comes from git in the background; the choice and the checkout follow its answer
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle, 10), "git still busy")
 
       vim.ui.select = original_select
       package.loaded["gitsuite.integrations.pickers_nvim"] = nil
@@ -234,6 +242,8 @@ describe("gitsuite.features.branch", function()
       }
 
       local ok = pcall(branch.switch)
+      -- the list comes from git in the background; the choice and the checkout follow its answer
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle, 10), "git still busy")
 
       package.loaded["gitsuite.integrations.pickers_nvim"] = nil
 
@@ -269,6 +279,8 @@ describe("gitsuite.features.branch", function()
         on_choice("other")
       end
       local ok = pcall(branch.switch)
+      -- the list comes from git in the background; the choice and the checkout follow its answer
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle, 10), "git still busy")
       vim.ui.select = original_select
 
       assert.is_true(ok)
@@ -294,6 +306,8 @@ describe("gitsuite.features.branch", function()
         on_choice("other")
       end
       local ok = pcall(branch.switch)
+      -- the list comes from git in the background; the choice and the checkout follow its answer
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle, 10), "git still busy")
       vim.ui.select = original_select
 
       assert.is_true(ok)
@@ -320,6 +334,8 @@ describe("gitsuite.features.branch", function()
         on_choice("other")
       end
       local ok = pcall(branch.switch)
+      -- the list comes from git in the background; the choice and the checkout follow its answer
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle, 10), "git still busy")
       vim.ui.select = original_select
       package.preload["sessions.core"] = orig_preload
 
