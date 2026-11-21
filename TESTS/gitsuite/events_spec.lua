@@ -126,8 +126,14 @@ describe("gitsuite User ReposcopeCloned listener", function()
     require("gitsuite.bindings.autocmds").register_cloned()
     local view = require("gitsuite.features.dashboard.view")
     assert.is_false(view.on_repo_cloned())
-    assert.is_true(#vim.api.nvim_get_autocmds({ group = "gitsuite_repo_cloned", event = "User" }) == 1)
-    local ok = pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "ReposcopeCloned", data = { path = "/x", url = "u" } })
+    assert.is_true(
+      #vim.api.nvim_get_autocmds({ group = "gitsuite_repo_cloned", event = "User" }) == 1
+    )
+    local ok = pcall(
+      vim.api.nvim_exec_autocmds,
+      "User",
+      { pattern = "ReposcopeCloned", data = { path = "/x", url = "u" } }
+    )
     vim.api.nvim_del_augroup_by_name("gitsuite_repo_cloned")
     assert.is_true(ok)
   end)
