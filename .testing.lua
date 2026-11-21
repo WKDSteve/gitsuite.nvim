@@ -117,6 +117,7 @@ return {
       platform = { "suite", "conformance" },
       -- `testing ci land`: a check branch ci/** runs the hosted legs, main moves to a commit only once it is green there
       land = true,
+      publish = { why = "ai.nvim checks out gitsuite.nvim at ci-verified" },
       -- the optional plugins the test sheets git-optional and git-browse load (TESTS/sheets/minit-extra.lua finds them below .deps/);
       -- without them, or without ripgrep, it is a reported skip. open.nvim and insights.nvim come from their
       -- ci-verified branch, like the fleet's own dependencies; a change there that moves the sheet's snapshots shows
