@@ -609,7 +609,12 @@ local function act_with(repo, run, apply, done)
       return done({ { repo = repo, id = "*", status = "error", message = info.err } })
     end
     local writes = {}
-    local results = apply(info, writes)
+    -- A failure while writing the files (a folder that cannot be created) must still answer: from the event
+    -- loop a raised error would leave :Git hooks without any report.
+    local ok, results = pcall(apply, info, writes)
+    if not ok then
+      return done({ { repo = repo, id = "*", status = "error", message = tostring(results) } })
+    end
     run_writes(writes, run, function()
       done(results)
     end)

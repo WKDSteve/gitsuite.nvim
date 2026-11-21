@@ -289,6 +289,28 @@ describe("gitsuite.features.hooks (async, few git calls)", function()
     end
   )
 
+  it("a failure while writing the hooks still answers, as an error result", function()
+    local repo = new_repo("nowrite-dir")
+    local real_mkdir = vim.fn.mkdir
+    vim.fn.mkdir = function()
+      error("E739: Cannot create directory")
+    end
+    local got
+    local ok, err = pcall(function()
+      hooks.install_async(repo, nil, nil, function(r)
+        got = r
+      end)
+      vim.wait(10000, function()
+        return got ~= nil
+      end)
+    end)
+    vim.fn.mkdir = real_mkdir
+    assert(ok, err)
+    assert.is_not_nil(got, "install_async answered")
+    assert.equals("error", got[1].status)
+    assert.truthy(got[1].message:find("E739", 1, true), got[1].message)
+  end)
+
   it("git that cannot be started is reported, not raised", function()
     local repo = new_repo("nogit")
     vim.system = function()
