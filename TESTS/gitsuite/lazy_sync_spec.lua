@@ -140,6 +140,7 @@ describe("gitsuite.integrations.lazy", function()
     assert.equals("off", cfg.plugins.after_sync)
     package.loaded["gitsuite.integrations.lazy"] = nil
     require("gitsuite.bindings").register(cfg)
+    pcall(vim.api.nvim_del_augroup_by_name, "gitsuite_repo_cloned")
     assert.is_nil(package.loaded["gitsuite.integrations.lazy"])
     package.loaded["gitsuite.integrations.lazy"] = lazy
     assert.is_false(lazy.status().registered)
@@ -736,6 +737,7 @@ describe("gitsuite.features.plugins.report({ open = false })", function()
     end
     vim.cmd("Git plugins report --no-open")
     plugins.report = saved_report
+    pcall(vim.api.nvim_del_augroup_by_name, "gitsuite_repo_cloned")
     assert.is_false(done.open)
   end)
 

@@ -7,6 +7,11 @@ describe("gitsuite", function()
     package.loaded["gitsuite.statusline"] = nil
   end)
 
+  after_each(function()
+    -- setup() registers the soft User ReposcopeCloned listener; leave no autocmd behind.
+    pcall(vim.api.nvim_del_augroup_by_name, "gitsuite_repo_cloned")
+  end)
+
   it(
     "setup() requires gitsuite.statusline, so a package.loaded-only consumer "
       .. "(ui.statusline.modules.gitsuite_conflict in ui.nvim) can see it without requiring it itself",

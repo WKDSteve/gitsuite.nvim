@@ -2601,4 +2601,17 @@ function M.reopen()
   return true
 end
 
+---A repository appeared on disk (reposcope's `User ReposcopeCloned`): re-read
+---the open dashboard page so the new clone shows up without pressing `R`.
+---Does nothing when no dashboard window is showing, or while a bulk action,
+---row action or page load is running (the next manual `R` picks it up then).
+---@return boolean refreshed True when a re-read was started
+function M.on_repo_cloned()
+  if not (_view and _view.bufnr and vim.api.nvim_buf_is_valid(_view.bufnr)) then return false end
+  if vim.fn.bufwinid(_view.bufnr) == -1 then return false end
+  if _page_switching or repo_state.bulk_verb() or next(_pending) ~= nil then return false end
+  _switch_page({ bufnr = _view.bufnr, records = _view.records }, 0)
+  return true
+end
+
 return M

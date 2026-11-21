@@ -42,8 +42,25 @@ local function setup_buffer_mappings(bufnr)
   end, opts, "[gitsuite] Conflict: previous")
 end
 
+---Soft listener for reposcope.nvim's `User ReposcopeCloned`: an open dashboard re-reads
+---its page, so a fresh clone appears. Without reposcope the event never fires -- no change.
+---@return nil
+function M.register_cloned()
+  local group = vim.api.nvim_create_augroup("gitsuite_repo_cloned", { clear = true })
+  vim.api.nvim_create_autocmd("User", {
+    group = group,
+    pattern = "ReposcopeCloned",
+    desc = "[gitsuite] Re-read the open dashboard after a reposcope clone",
+    callback = function()
+      if not package.loaded["gitsuite.features.dashboard.view"] then return end
+      require("gitsuite.features.dashboard.view").on_repo_cloned()
+    end,
+  })
+end
+
 ---@param cfg GitSuite.Config
 function M.register(cfg)
+  M.register_cloned()
   if not cfg.features.conflict then return end
 
   local group = vim.api.nvim_create_augroup("gitsuite_conflict_scan", { clear = true })

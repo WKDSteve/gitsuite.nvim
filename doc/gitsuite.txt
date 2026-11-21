@@ -247,6 +247,10 @@ completion callback rather than merely after the (async) action was
 requested. Not fired for a hunk reset: gitsigns' reset only rewrites the
 buffer's in-memory lines, never the index or the file on disk.
 
+Listened to (not fired): `User ReposcopeCloned` `{ path, url }` from reposcope.nvim --
+an open dashboard re-reads its page so the fresh clone shows up (skipped while
+a bulk or row action or a page load runs). Without reposcope nothing happens.
+
                                                      *GitsuitePluginsReported*
 `GitsuitePluginsReported`  `{ id, mode, at, plugins, commits, errors, saved }`
 -- after `:Git plugins report` has built a report: `id` names it in the report
