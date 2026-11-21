@@ -27,7 +27,9 @@ noted:
   bridge back into the parent Neovim), `neogit` and `diffview.nvim`, each
   a thin pass-through to the real plugin/binary.
 - **`status`** — repository status (branch, ahead/behind, dirty) and a
-  quickfix export of the same, via `lib.nvim.git.status_porcelain`.
+  quickfix export of the same: one asynchronous `git status` each (parsed
+  with `lib.nvim.git.parse_status` for the quickfix list), so the editor
+  never waits for git.
 - **`plugins`** — what changed in the plugins a plugin manager installed.
   `:Git plugins log` shows the newest commits of one plugin (or of any clone),
   single-repository like `ui lazygit [dir]` — the target is named explicitly
