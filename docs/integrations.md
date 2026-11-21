@@ -170,6 +170,18 @@ opts = {
 - A hook that throws, errors or stays silent for two minutes is reported and nothing
   is stored. `:checkhealth gitsuite` says whether a hook is set.
 
+## `github_stats.lua` — the traffic cell of the dashboard (optional)
+
+A soft dependency on [github_stats.nvim](https://github.com/WKDSteve/github_stats.nvim).
+While it is loaded (`package.loaded`, the dashboard never loads it), a
+`VIEWS/CLONES 14D` column shows `12/3` for every repository whose `origin`
+is a github.com repository github_stats tracks and that had any traffic in
+the last 14 days. Only what github_stats has stored on disk is read
+(`analytics.query_metric`); there is no network access, and any failure
+reads as "no badge". Without github_stats, or without a tracked repository
+on the page, the column is not there at all. Answers are cached per
+directory for a minute.
+
 ## See also
 
 - [Architecture](architecture.md) — the "adapter vs. integration" naming and the dependency-direction rule both are built on.

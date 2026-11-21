@@ -84,6 +84,7 @@ local repo_actions = require("gitsuite.features.dashboard.actions")
 local repos = require("gitsuite.features.dashboard.repos")
 local dashboard_one = require("gitsuite.features.dashboard.status").dashboard_one
 local repo_state = require("gitsuite.features.dashboard.repo_state")
+local traffic = require("gitsuite.integrations.github_stats")
 local bulk = require("gitsuite.features.dashboard.bulk")
 local bulk_report = require("gitsuite.features.dashboard.bulk_report")
 local progress = require("gitsuite.util.progress")
@@ -361,6 +362,9 @@ local function _center(s, width)
   return (" "):rep(left) .. s .. (" "):rep(pad - left)
 end
 
+---Heading of the optional views/clones column (github_stats, last 14 days).
+local TRAFFIC_HEADER = "VIEWS/CLONES 14D"
+
 ---@private
 ---@internal
 ---Renders a record's upstream divergence. Empty when the branch tracks an
@@ -397,13 +401,15 @@ end
 function M.render(records)
   local dw = vim.fn.strdisplaywidth
   local name_cells, branch_cells, sync_cells, state_cells, age_cells = {}, {}, {}, {}, {}
-  local name_w, branch_w, sync_w = #"REPOSITORY", #"BRANCH", 0
+  local traffic_cells = {}
+  local name_w, branch_w, sync_w, traffic_w = #"REPOSITORY", #"BRANCH", 0, 0
   local state_w, age_w = math.max(#"STATE", MIN_STATE_W), #"LAST COMMIT"
 
   for i, r in ipairs(records) do
     name_cells[i] = _elide(r.name, MAX_NAME_W)
     branch_cells[i] = _elide_middle(r.branch, MAX_BRANCH_W)
     sync_cells[i] = _sync_cell(r)
+    traffic_cells[i] = r.unscanned and "" or traffic.badge(r.path)
 
     local state = r.state
     if r.state == "dirty" then state = ("dirty (%d)"):format(r.dirty) end
@@ -424,17 +430,21 @@ function M.render(records)
     name_w = math.max(name_w, dw(name_cells[i]))
     branch_w = math.max(branch_w, dw(branch_cells[i]))
     sync_w = math.max(sync_w, dw(sync_cells[i]))
+    traffic_w = math.max(traffic_w, dw(traffic_cells[i]))
     state_w = math.max(state_w, dw(state_cells[i]))
     age_w = math.max(age_w, dw(age_cells[i]))
   end
 
   local show_sync = sync_w > 0
   if show_sync then sync_w = math.max(sync_w, #"SYNC") end
+  -- Only while github_stats knows some of these repositories: no column of blanks otherwise.
+  local show_traffic = traffic_w > 0
+  if show_traffic then traffic_w = math.max(traffic_w, #TRAFFIC_HEADER) end
 
   -- Cell positions, so the highlight lookups below don't have to repeat the
   -- "is SYNC showing?" arithmetic at every call site.
   local NAME, BRANCH = 1, 2
-  local STATE = show_sync and 4 or 3
+  local STATE = 3 + (show_sync and 1 or 0) + (show_traffic and 1 or 0)
   local AGE = STATE + 1
 
   ---Builds one line's cell list. The same function feeds the header, so the
@@ -442,15 +452,19 @@ function M.render(records)
   ---@param name string
   ---@param branch string
   ---@param sync string
+  ---@param views_clones string
   ---@param state string
   ---@param age string
   ---@return { text: string, width: integer, center?: boolean }[]
-  local function cells(name, branch, sync, state, age)
+  local function cells(name, branch, sync, views_clones, state, age)
     local list = {
       { text = name, width = name_w },
       { text = branch, width = branch_w, center = true },
     }
     if show_sync then list[#list + 1] = { text = sync, width = sync_w, center = true } end
+    if show_traffic then
+      list[#list + 1] = { text = views_clones, width = traffic_w, center = true }
+    end
     list[#list + 1] = { text = state, width = state_w, center = true }
     list[#list + 1] = { text = age, width = age_w, center = true }
     return list
@@ -485,7 +499,10 @@ function M.render(records)
   ---@type DashboardHighlight[]
   local hls = {}
 
-  local header = build(MARK_GUTTER, cells("REPOSITORY", "BRANCH", "SYNC", "STATE", "LAST COMMIT"))
+  local header = build(
+    MARK_GUTTER,
+    cells("REPOSITORY", "BRANCH", "SYNC", TRAFFIC_HEADER, "STATE", "LAST COMMIT")
+  )
   local lines = { (header:gsub("%s+$", "")) }
   hls[#hls + 1] = { row = 0, col = 0, end_col = -1, hl = HL.header }
 
@@ -494,7 +511,14 @@ function M.render(records)
     local gutter = marked and (MARK_INDICATOR .. " ") or MARK_GUTTER
     local line, spans = build(
       gutter,
-      cells(name_cells[i], branch_cells[i], sync_cells[i], state_cells[i], age_cells[i])
+      cells(
+        name_cells[i],
+        branch_cells[i],
+        sync_cells[i],
+        traffic_cells[i],
+        state_cells[i],
+        age_cells[i]
+      )
     )
 
     lines[#lines + 1] = (line:gsub("%s+$", ""))
@@ -519,6 +543,10 @@ function M.render(records)
       state_hl = HL[r.state] or HL.muted
     end
     hls[#hls + 1] = { row = row, col = spans[STATE][1], end_col = spans[STATE][2], hl = state_hl }
+    if show_traffic then
+      local t = spans[STATE - 1]
+      hls[#hls + 1] = { row = row, col = t[1], end_col = t[2], hl = HL.muted }
+    end
     hls[#hls + 1] = { row = row, col = spans[AGE][1], end_col = spans[AGE][2], hl = HL.muted }
   end
 
