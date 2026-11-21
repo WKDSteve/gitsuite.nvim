@@ -191,7 +191,7 @@ marked "no marker convention recognized".
     keymaps = { blame_full = "<leader>gb", ui_lazygit = "<leader>lg" },
     browse = { hosts = {} },
     dashboard = { base_dir = "", extra_paths = {}, groups = {}, pull_scope = "behind", fetch_jobs = 4,
-      fetch_on_open = false },
+      fetch_on_open = false, fetch_precheck = false },
     plugins = { sources = "auto", roots = {}, log_limit = 50, timeout_ms = 30000,
       include_local = false, mode = "updated", max_commits = 1000, parallel = 4,
       fetch_jobs = 2, fetch_timeout_ms = 60000, fetch_confirm = 5,
@@ -206,6 +206,14 @@ Set a `keymaps.*` entry to `false` to disable that default mapping without
 disabling the underlying feature. `dashboard` has no `features.dashboard`
 flag -- the scope is always registered, see |gitsuite-dashboard|. See
 docs/configuration.md for every key explained individually.
+
+`dashboard.fetch_precheck = "github"` (off by default): before `gf`, `f` on
+marked rows and fetch on open, one GitHub GraphQL query asks for the tip of
+every repository's default branch, and only the repositories whose
+`origin/<default branch>` lags behind it are fetched. Only the default branch
+is compared, and only while it is checked out; a non-GitHub `origin`, another
+branch, no token (`gh auth login`) or a failed query fall back to the plain
+fetch. The summary says how many fetches were saved.
 
 ==============================================================================
 6. ADAPTERS                                                    *gitsuite-adapters*

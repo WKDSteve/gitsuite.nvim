@@ -133,6 +133,13 @@ local _view
 ---@type boolean
 local _page_switching = false
 
+---The GitHub precheck of the latest batch fetch (`dashboard.fetch_precheck`):
+---its rows show "up to date (precheck)" while that batch runs.
+---@type GitSuitePrecheck|nil
+local _precheck = nil
+-- Defined next to `_run_bulk`, used by `M.fetch_pipeline` as well.
+local _new_precheck
+
 ---Every row re-read after an action (see `_store_record`), by path, stamped
 ---with `_reread_seq` at the time it was stored. A scan running alongside a
 ---batch (`:Git dashboard` again mid-run) may read a repository before the
@@ -419,6 +426,8 @@ function M.render(records)
       state = ("%s %s..."):format(SPINNER, pending)
     elseif phase == "pending" then
       state = ("%s %s queued"):format(QUEUED, repo_state.bulk_verb())
+    elseif phase == "done" and _precheck and _precheck.fresh[r.path] then
+      state = "✓ up to date (precheck)"
     elseif phase == "fetching" then
       state = ("%s %s..."):format(SPINNER, repo_state.bulk_verb())
     elseif phase == "failed" then
@@ -1166,6 +1175,20 @@ end
 
 ---@private
 ---@internal
+---The GitHub precheck of a batch fetch (`dashboard.fetch_precheck`), nil when
+---it is off or the batch is no fetch. Becomes the one the rows show.
+---@param verb string
+---@return GitSuitePrecheck|nil
+function _new_precheck(verb)
+  if verb ~= "fetch" or require("gitsuite.config").get().dashboard.fetch_precheck ~= "github" then
+    return nil
+  end
+  _precheck = require("gitsuite.features.dashboard.precheck").new()
+  return _precheck
+end
+
+---@private
+---@internal
 ---Runs `action_fn` against every one of `targets`, then reports a single
 ---summary: per repository what changed, what failed and why, what was skipped, and
 ---a count of the rest (`gitsuite.features.dashboard.bulk_report`). The walk itself
@@ -1197,14 +1220,23 @@ local function _run_bulk(bufnr, records, verb, action_fn, targets)
     end
   end
 
+  local pc = _new_precheck(verb)
+  if pc then
+    local paths = {}
+    for i, target in ipairs(targets) do
+      paths[i] = target.path
+    end
+    pc:start(paths)
+  end
+
   bulk.run({
     verb = verb,
     targets = targets,
-    action = action_fn,
+    action = pc and pc:wrap_action(action_fn) or action_fn,
     limit = (verb == "fetch" or verb == "sync")
         and require("gitsuite.config").get().dashboard.fetch_jobs
       or 1,
-    reread = dashboard_one,
+    reread = pc and pc:wrap_reread(dashboard_one) or dashboard_one,
     on_reread = function(new_record)
       _store_record(records, new_record)
     end,
@@ -1217,6 +1249,8 @@ local function _run_bulk(bufnr, records, verb, action_fn, targets)
     ),
     on_finish = function(results)
       local message, any_failed = bulk_report.format(verb, results, total)
+      local extra = pc and pc:summary(#results)
+      if extra then message = message .. "\n\n" .. extra end
       if any_failed then
         notify(message, vim.log.levels.WARN)
       else
@@ -2525,18 +2559,20 @@ end
 ---during its own fetch on open shows that one, and does not queue a second.
 ---Stops early when the first few fetches all fail (no network), says so once.
 ---@return GitSuiteBulkFeeder|nil feeder `push` each scanned repository, `close` once the scan is through; nil when nothing was started
+---@return GitSuitePrecheck|nil precheck With `dashboard.fetch_precheck`: `start` it with the page's paths as soon as they are known (the scan's `on_discover`)
 function M.fetch_pipeline()
   if repo_state.bulk_verb() or _page_switching then return nil end
   local cfg = require("gitsuite.config").get().dashboard
+  local pc = _new_precheck("fetch")
   local feeder = bulk.run({
     verb = "fetch",
     targets = {},
     open = true,
     stop_after_failures = FETCH_ON_OPEN_STOP_AFTER,
-    action = repo_actions.fetch,
+    action = pc and pc:wrap_action(repo_actions.fetch) or repo_actions.fetch,
     limit = cfg.fetch_jobs,
     open_limit = math.min(FETCH_ON_OPEN_WHILE_SCANNING, cfg.fetch_jobs),
-    reread = dashboard_one,
+    reread = pc and pc:wrap_reread(dashboard_one) or dashboard_one,
     on_reread = function(new_record)
       if not new_record then return end
       _store_record(_view and _view.records or {}, new_record)
@@ -2554,6 +2590,8 @@ function M.fetch_pipeline()
       -- The dashboard was closed meanwhile: a result popup would come out of nowhere.
       if ended.abandoned or #results == 0 then return end
       local message, any_failed = bulk_report.format("fetch", results, #results)
+      local extra = pc and pc:summary(#results)
+      if extra then message = message .. "\n\n" .. extra end
       if ended.stopped then
         notify(
           ("fetch on open stopped: the first %d fetches failed (no network?)\n\n%s"):format(
@@ -2570,7 +2608,7 @@ function M.fetch_pipeline()
     end,
   })
   if feeder then _watch_close_for(feeder) end
-  return feeder
+  return feeder, feeder and pc or nil
 end
 
 ---Marks the start of a scan: hand the value to `M.show` as `reread_since`, and

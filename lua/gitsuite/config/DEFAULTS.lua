@@ -70,6 +70,10 @@ local DEFAULTS = {
     -- its fetch is through -- the `gf` most opens are followed by, without asking.
     -- Off by default: opening a panel should not reach the network unasked.
     fetch_on_open = false,
+    -- `gf` and fetch on open ask GitHub first, in one GraphQL query for the whole page,
+    -- and fetch only the repositories whose default branch moved ("github"; needs a
+    -- token: `gh auth login` or github_stats' token variable). false fetches every one.
+    fetch_precheck = false,
     -- `<RightMouse>` on the dashboard opens a menu of the same row/whole-page
     -- actions the keys already run (lib.nvim.contextmenu.bind_buffer),
     -- instead of ui.nvim's global one. Off disables the binding only --

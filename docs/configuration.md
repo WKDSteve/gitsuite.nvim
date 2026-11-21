@@ -109,6 +109,7 @@ dashboard = {
   pull_scope = "behind", -- gP's focused default: "behind" (only repos behind upstream) or "all"
   fetch_jobs = 4,    -- gf, gS and gs work on this many repositories at once (1 to 16); gp and gP stay one by one
   fetch_on_open = false, -- :Git dashboard fetches the page it opens with, row by row as the scan reads them
+  fetch_precheck = false, -- "github": gf and fetch on open ask GitHub once and fetch only what moved
   context_menu = true, -- <RightMouse> opens the dashboard's own menu; false disables the binding only
 },
 ```
@@ -179,6 +180,33 @@ opening a panel should not reach the network unasked. What it does not do:
 While it runs, `gf`/`gp`/... and the page keys refuse like during any batch;
 cancel it through the progress indicator (it stops queueing, fetches already
 running finish).
+
+`fetch_precheck = "github"` lets the batch fetches (`gf`, `f` on marked rows)
+and fetch on open skip the fetches that
+would bring nothing. Before the first fetch, one GitHub GraphQL query (one per
+50 repositories, one rate-limit point each) asks for the tip of every
+repository's default branch; a repository whose `origin/<default branch>`
+already points there is not fetched, its row shows `✓ up to date (precheck)`
+while the batch runs, and the summary ends with `GitHub precheck: 70 of 80
+fetches saved`. Off by default (it reaches GitHub). The local side is read from
+files (`.git/HEAD`, `refs/remotes/origin/…`, `packed-refs`), not by starting git.
+The request goes through `lib.nvim.net.github`, the client github_stats.nvim
+uses too; the token is github_stats' `token_env_var` when github_stats is
+loaded, otherwise `gh auth token` (`gh auth login` once).
+
+Only the default branch is compared, and only while it is checked out. These
+repositories are fetched as before:
+
+- an `origin` that is not github.com (GitLab, Codeberg, self-hosted, no `origin`);
+- a clone on another branch, or without a remote-tracking ref for its branch;
+- every repository, when there is no token or the query fails (the summary
+  says why), and any repository the answer leaves out (renamed, private
+  without access).
+
+Other remote branches and tags are not looked at: a repository whose default
+branch did not move counts as up to date even if a feature branch on GitHub
+did. Fetch that row by hand (`f` on it with nothing marked is always a plain
+fetch), or leave the option off. `gS`/`gs` (sync) always fetch.
 
 `context_menu` controls `<RightMouse>` on the dashboard buffer: on by
 default, it opens a menu of the same row/batch actions the keys already run

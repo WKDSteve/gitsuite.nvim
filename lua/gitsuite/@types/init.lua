@@ -41,6 +41,7 @@
 ---@field groups      GitSuite.Config.Dashboard.Group[]  Additional named pages, see `GitSuite.Config.Dashboard.Group`.
 ---@field fetch_jobs  integer  Fetches `gf` and syncs `gS`/`gs` run at once (`gp` and `gP` stay sequential).
 ---@field pull_scope  "behind"|"all"  Focused default of `gP`'s prompt: only repositories behind their upstream, or all.
+---@field fetch_precheck false|"github" `gf` and fetch on open fetch only the repositories whose default branch GitHub reports moved (one GraphQL query per page); false fetches every one.
 ---@field fetch_on_open boolean `:Git dashboard` fetches the page it opens with, each repository once its row is read (`fetch_jobs` at once).
 ---@field context_menu boolean `<RightMouse>` opens the dashboard's own menu (lib.nvim.contextmenu.bind_buffer) instead of ui.nvim's global one.
 

@@ -458,6 +458,69 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
   end)
 
   it(
+    "with fetch_precheck, gf fetches only what GitHub reports moved and says how many it saved",
+    function()
+      require("gitsuite.config").setup({ dashboard = { fetch_jobs = 2, fetch_precheck = "github" } })
+      actions.fetch = fake("fetch")
+      local precheck = require("gitsuite.features.dashboard.precheck")
+      local orig =
+        { local_state = precheck.local_state, token = precheck.token, request = precheck.request }
+      local OID = string.rep("a", 40)
+      precheck.local_state = function(dir)
+        local name = vim.fn.fnamemodify(dir, ":t")
+        return { slug = "me/" .. name, owner = "me", name = name, branch = "main", oid = OID }
+      end
+      precheck.token = function()
+        return "tkn", "gh"
+      end
+      local release_answer
+      precheck.request = function(_, _, cb)
+        -- r1 and r3 unchanged, r2 moved.
+        release_answer = function()
+          cb({
+            status = 200,
+            data = {
+              data = {
+                r1 = { defaultBranchRef = { name = "main", target = { oid = OID } } },
+                r2 = {
+                  defaultBranchRef = { name = "main", target = { oid = string.rep("b", 40) } },
+                },
+                r3 = { defaultBranchRef = { name = "main", target = { oid = OID } } },
+              },
+            },
+          }, nil)
+        end
+      end
+
+      local ok, err = pcall(function()
+        view.show({ record("r1"), record("r2"), record("r3") }, { output = "buffer" })
+        press("gf")
+        wait_for(function()
+          return release_answer ~= nil
+        end, "the GitHub query")
+        assert.same({}, calls, "no fetch before GitHub answered")
+        release_answer()
+        wait_for(function()
+          return waiting["fetch /fake/r2"] ~= nil
+        end, "r2 fetching")
+        wait_for(function()
+          return row_text("r1"):find("up to date (precheck)", 1, true) ~= nil
+        end, "r1 shown as up to date by the precheck")
+        release("fetch /fake/r2", true)
+        wait_for(function()
+          return state.bulk_verb() == nil
+        end, "bulk finished")
+        assert.same({ "fetch /fake/r2" }, calls)
+        local joined = table.concat(messages, "\n")
+        assert.truthy(joined:find("GitHub precheck: 2 of 3 fetches saved", 1, true), joined)
+      end)
+      precheck.local_state, precheck.token, precheck.request =
+        orig.local_state, orig.token, orig.request
+      if not ok then error(err, 0) end
+    end
+  )
+
+  it(
     "gS syncs every repository, dashboard.fetch_jobs at once, and lists the one that failed",
     function()
       require("gitsuite.config").setup({ dashboard = { fetch_jobs = 2 } })

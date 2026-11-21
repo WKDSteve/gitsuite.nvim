@@ -86,7 +86,11 @@ function M.show(dir, output, out_path)
   local interactive = mode == "popup" or mode == "buffer" or mode == "split" or mode == "vsplit"
   ---@type GitSuiteBulkFeeder|nil
   local feeder
-  if interactive and config.get().dashboard.fetch_on_open then feeder = view.fetch_pipeline() end
+  ---@type GitSuitePrecheck|nil
+  local precheck
+  if interactive and config.get().dashboard.fetch_on_open then
+    feeder, precheck = view.fetch_pipeline()
+  end
 
   ---@type GitSuiteDashboardScanStream|nil
   local stream
@@ -94,10 +98,14 @@ function M.show(dir, output, out_path)
     stream = {
       -- Guarded: a raise here would stop the scan before its callback, so the
       -- open fetch queue would never be closed and would block `gf` for good.
-      on_discover = live
-          and function(...)
-            local ok, err = pcall(view.live_discover, ...)
-            if not ok then notify("dashboard: " .. tostring(err), vim.log.levels.WARN) end
+      on_discover = (live or precheck)
+          and function(paths)
+            if live then
+              local ok, err = pcall(view.live_discover, paths)
+              if not ok then notify("dashboard: " .. tostring(err), vim.log.levels.WARN) end
+            end
+            -- The whole page is known before any row is read: one query for all of it.
+            if precheck then pcall(precheck.start, precheck, paths) end
           end
         or nil,
       on_record = function(path, record, err)
