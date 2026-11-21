@@ -382,6 +382,27 @@ describe("gitsuite.features.dashboard.bulk", function()
       assert.is_nil(state.bulk_verb())
     end)
 
+    it("cancel with nothing in flight ends the walk and refuses further pushes", function()
+      local cancel
+      start({}, {
+        open = true,
+        handle = {
+          on_cancel = function(_, fn)
+            cancel = fn
+          end,
+          update = function() end,
+          finish = function() end,
+        },
+      })
+      cancel()
+      until_(function()
+        return run.results ~= nil
+      end)
+      assert.is_true(run.ended.cancelled)
+      assert.is_nil(state.bulk_verb())
+      assert.is_false(run.feeder.push(target("a")))
+    end)
+
     it("takes a path only once", function()
       start({}, { open = true })
       assert.is_true(run.feeder.push(target("a")))

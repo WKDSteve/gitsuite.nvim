@@ -92,9 +92,17 @@ function M.show(dir, output, out_path)
   local stream
   if live or feeder then
     stream = {
-      on_discover = live and view.live_discover or nil,
+      -- Guarded: a raise here would stop the scan before its callback, so the
+      -- open fetch queue would never be closed and would block `gf` for good.
+      on_discover = live and function(...)
+        local ok, err = pcall(view.live_discover, ...)
+        if not ok then notify("dashboard: " .. tostring(err), vim.log.levels.WARN) end
+      end or nil,
       on_record = function(path, record, err)
-        if live then view.live_record(path, record, err) end
+        if live then
+          local ok, live_err = pcall(view.live_record, path, record, err)
+          if not ok then notify("dashboard: " .. tostring(live_err), vim.log.levels.WARN) end
+        end
         -- A repository that could not be read is left out: its fetch would fail
         -- the same way, and count towards stopping the queue for no network.
         if feeder and record then

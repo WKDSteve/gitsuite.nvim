@@ -107,8 +107,14 @@ function M.run(opts)
   redraw()
 
   local cancelled, stopped = false, false
+  local pump
   if handle then guarded(handle.on_cancel, handle, function()
     cancelled = true
+    -- Pumped as well: with nothing in flight (an open queue waiting for the
+    -- scan) no slot is ever given back, so only this call can end the walk.
+    vim.schedule(function()
+      if pump then pump() end
+    end)
   end) end
 
   -- Filled per position in `targets`, so the summary lists repositories in
@@ -139,8 +145,6 @@ function M.run(opts)
     end
     opts.on_finish(ordered, { cancelled = cancelled, stopped = stopped })
   end
-
-  local pump
 
   local function launch(target, pos)
     repo_state.set_phase(target.path, "fetching", generation)
