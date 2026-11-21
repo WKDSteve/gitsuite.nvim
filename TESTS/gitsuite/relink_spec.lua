@@ -35,6 +35,7 @@ describe("gitsuite.features.status.relink", function()
       seen[#seen + 1] = tostring(msg)
     end
     local ok = pcall(relink.relink)
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
     vim.notify = original_notify
 
     package.preload["filetree.refs"] = orig_preload
@@ -79,6 +80,7 @@ describe("gitsuite.features.status.relink", function()
     it("no renamed files: reports so, never reaches filetree.refs", function()
       vim.fn.writefile({ "content" }, repo .. "/plain.md")
       relink.relink()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
       assert.is_nil(captured.scan, "scan() was never called")
     end)
@@ -90,6 +92,7 @@ describe("gitsuite.features.status.relink", function()
       F.git(repo, "mv", "old.md", "new.md")
 
       relink.relink()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
       local root = git.repo_root()
       assert.is_not_nil(root)

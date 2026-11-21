@@ -49,25 +49,30 @@ end
 
 ---@internal
 --- The directory lazygit is rooted at: the repo containing `repo_dir` or,
---- without one, the repo of the current cwd.
+--- without one, the repo of the current cwd. One git call
+--- (`rev-parse --show-toplevel` fails outside a work tree, so it is also the
+--- "is this a repo" check), and the editor does not wait for it: `done` comes
+--- from the event loop.
 ---@param repo_dir string|nil
----@return string|nil root
----@return string|nil err
-local function resolve_repo_dir(repo_dir)
-  local git = require("lib.nvim.git")
-
-  if repo_dir == nil or repo_dir == "" then
-    if not git.in_git_repo() then return nil, "not inside a git repository" end
-    return git.repo_root() or vim.fn.getcwd()
+---@param done fun(root: string|nil, err: string|nil)
+local function resolve_repo_dir(repo_dir, done)
+  local gitq = require("gitsuite.util.gitq")
+  local dir, suffix = nil, ""
+  if repo_dir ~= nil and repo_dir ~= "" then
+    dir = vim.fs.normalize(repo_dir)
+    local stat = vim.uv.fs_stat(dir)
+    if not stat or stat.type ~= "directory" then
+      return done(nil, "not a directory: " .. repo_dir)
+    end
+    suffix = ": " .. repo_dir
   end
-
-  local dir = vim.fs.normalize(repo_dir)
-  local stat = vim.uv.fs_stat(dir)
-  if not stat or stat.type ~= "directory" then return nil, "not a directory: " .. repo_dir end
-  if not git.in_git_repo({ dir = dir }) then
-    return nil, "not inside a git repository: " .. repo_dir
-  end
-  return git.repo_root({ dir = dir }) or dir
+  gitq.run({ "rev-parse", "--show-toplevel" }, { dir = dir }, function(res)
+    local root = gitq.line(res)
+    if not root then
+      return done(nil, gitq.failure(res, "not inside a git repository" .. suffix))
+    end
+    done(root, nil)
+  end)
 end
 
 ---@internal
@@ -219,17 +224,20 @@ function M.open(repo_dir)
     return
   end
 
-  local root, err = resolve_repo_dir(repo_dir)
-  if not root then
-    notify.error("ui lazygit: " .. err)
-    return
-  end
-
-  -- terminal.nvim first; when it is missing or did not start lazygit (it
-  -- reported why), the own float.
-  local term = terminal_facade()
-  if term and open_via_terminal(term, root) then return end
-  open_own_float(root)
+  -- A newer :Git ui lazygit wins: the answer of an older one starts nothing.
+  local valid = require("gitsuite.util.gitq").ticket("ui.lazygit")
+  resolve_repo_dir(repo_dir, function(root, err)
+    if not valid() then return end
+    if not root then
+      notify.error("ui lazygit: " .. err)
+      return
+    end
+    -- terminal.nvim first; when it is missing or did not start lazygit (it
+    -- reported why), the own float.
+    local term = terminal_facade()
+    if term and open_via_terminal(term, root) then return end
+    open_own_float(root)
+  end)
 end
 
 ---Register the nvr bridge commands. Idempotent; called once from

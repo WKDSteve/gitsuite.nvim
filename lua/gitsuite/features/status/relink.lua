@@ -21,6 +21,7 @@
 --- written.
 
 local git = require("lib.nvim.git")
+local gitq = require("gitsuite.util.gitq")
 local notify = require("gitsuite.util.notify")
 
 local M = {}
@@ -45,13 +46,30 @@ end
 
 ---Scan for references to every rename `git status` currently reports, and
 ---offer to update them (preview/diff/select, never silent -- see module doc).
+---Two git calls started together (`rev-parse --show-toplevel`, which also tells
+---whether this is a work tree, and `status`); the editor does not wait, and only
+---the newest request goes on to the scan.
 ---@return nil
 function M.relink()
-  if not git.in_git_repo() then
-    notify.error("status: not inside a git repository")
-    return
-  end
+  local valid = gitq.ticket("status.relink")
+  gitq.all({
+    { args = { "rev-parse", "--show-toplevel" } },
+    { args = { "status", "--porcelain", "-z", "-u" }, opts = { read_only = true, binary = true } },
+  }, function(res)
+    if not valid() then return end
+    local root = gitq.line(res[1])
+    if not root then
+      notify.error("status: " .. gitq.failure(res[1], "not inside a git repository"))
+      return
+    end
+    M.relink_in(root, res[2].code == 0 and git.parse_status(res[2].stdout) or nil)
+  end)
+end
 
+---The rest of `relink`, once git answered.
+---@param root string
+---@param status Lib.Git.StatusMap|nil
+function M.relink_in(root, status)
   local ok_req, refs = pcall(require, "filetree.refs")
   if not ok_req then
     notify.error(
@@ -60,15 +78,8 @@ function M.relink()
     return
   end
 
-  local status = git.status_porcelain()
   if not status then
     notify.info("status: relink: nothing to report (clean working tree, or not a git repo)")
-    return
-  end
-
-  local root = git.repo_root()
-  if not root then
-    notify.error("status: relink: could not resolve the repository root")
     return
   end
 

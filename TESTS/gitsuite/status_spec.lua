@@ -19,6 +19,7 @@ describe("gitsuite.features.status", function()
 
   it("quickfix() does not error and does not raise on a clean tree", function()
     local ok = pcall(status.quickfix)
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
     assert.is_true(ok)
   end)
 
@@ -35,6 +36,7 @@ describe("gitsuite.features.status", function()
 
     local ok, err = pcall(function()
       status.quickfix()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       local qf = vim.fn.getqflist({ title = 0, items = 0 })
       assert.equals("gitsuite: status", qf.title)
 
@@ -77,6 +79,7 @@ describe("gitsuite.features.status", function()
 
     it("quickfix() lists them under their real, existing paths", function()
       status.quickfix()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       local items = vim.fn.getqflist({ items = 0 }).items
 
       assert.equals(2, #items)

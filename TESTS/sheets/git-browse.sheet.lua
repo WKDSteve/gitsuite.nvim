@@ -24,19 +24,19 @@ return {
     },
     { keys = ":Git browse file<CR>" },
     {
-      expect = [[_G.opened[1] == "browser:https://github.com/me/proj/blob/main/notes.txt"]],
+      wait = [[_G.opened[1] == "browser:https://github.com/me/proj/blob/main/notes.txt"]],
       note = "browse file opens the file on its web host",
     },
     { lua = [[_G.forget()]] },
     { keys = ":Git browse repo<CR>" },
     {
-      expect = [[_G.opened[1] == "browser:https://github.com/me/proj"]],
+      wait = [[_G.opened[1] == "browser:https://github.com/me/proj"]],
       note = "browse repo opens the root",
     },
     { lua = [[_G.forget(); vim.cmd("normal! Vj\27")]] },
     { keys = ":Git browse selection<CR>" },
     {
-      expect = [[_G.opened[1] == "browser:https://github.com/me/proj/blob/main/notes.txt#L1-L2"]],
+      wait = [[_G.opened[1] == "browser:https://github.com/me/proj/blob/main/notes.txt#L1-L2"]],
       note = "browse selection carries the line range",
     },
   },

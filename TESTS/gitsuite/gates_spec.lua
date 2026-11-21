@@ -65,6 +65,7 @@ describe("gitsuite.features.status.gates", function()
         seen[#seen + 1] = tostring(msg)
       end
       local ok = pcall(gates.todos)
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       vim.notify = original_notify
 
       package.preload["insights.todos"] = orig_preload
@@ -88,6 +89,7 @@ describe("gitsuite.features.status.gates", function()
         end,
       }
       gates.todos()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       package.loaded["insights.todos"] = nil
 
       assert.equals(0, scan_calls)
@@ -127,6 +129,7 @@ describe("gitsuite.features.status.gates", function()
         end,
       }
       gates.todos()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       package.loaded["insights.todos"] = nil
 
       local items = vim.fn.getqflist({ items = 0 }).items
@@ -144,6 +147,7 @@ describe("gitsuite.features.status.gates", function()
       run("git", "commit", "-q", "-m", "init")
 
       local ok = pcall(gates.lint)
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       assert.is_true(ok)
     end)
 
@@ -166,6 +170,7 @@ describe("gitsuite.features.status.gates", function()
         seen[#seen + 1] = tostring(msg)
       end
       gates.lint()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       vim.notify = original_notify
       vim.diagnostic.reset(ns, bufnr)
 
@@ -187,6 +192,7 @@ describe("gitsuite.features.status.gates", function()
       run("git", "commit", "-q", "-m", "init")
 
       local ok = pcall(gates.spell)
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       assert.is_true(ok)
     end)
 
@@ -196,6 +202,7 @@ describe("gitsuite.features.status.gates", function()
       vim.fn.writefile({ "this is a tset of the speling gate" }, repo .. "/note.md")
 
       gates.spell()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       vim.o.spelllang = original_spelllang
 
       local items = vim.fn.getqflist({ items = 0 }).items
@@ -214,6 +221,7 @@ describe("gitsuite.features.status.gates", function()
       vim.fn.writefile({ "this is a clean sentence with no mistakes" }, repo .. "/clean.md")
 
       gates.spell()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       vim.o.spelllang = original_spelllang
 
       local items = vim.fn.getqflist({ items = 0 }).items
@@ -234,6 +242,7 @@ describe("gitsuite.features.status.gates", function()
       fh:close()
 
       local ok = pcall(gates.spell)
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       vim.o.spelllang = original_spelllang
 
       assert.is_true(ok, "a binary changed file must not error the gate")

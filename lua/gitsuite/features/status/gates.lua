@@ -23,30 +23,46 @@
 --- committed, not a possibly-unsaved buffer.
 
 local git = require("lib.nvim.git")
+local gitq = require("gitsuite.util.gitq")
 local notify = require("gitsuite.util.notify")
 
 local M = {}
 
+-- The bodies of the gates, defined below their commands; they run once git answered.
+local run_todos, run_lint, run_spell
+
 ---@internal
 ---Absolute paths of every changed file `git status` reports, except
----deletions (there is nothing left on disk to check).
----@return string[]|nil paths
----@return string|nil err
-local function changed_files()
-  if not git.in_git_repo() then return nil, "not inside a git repository" end
-  local status = git.status_porcelain()
-  if not status then return nil, "nothing to report (clean working tree, or not a git repo)" end
-  local root = git.repo_root()
-  if not root then return nil, "could not resolve the repository root" end
-
-  local paths = {}
-  for path, entry in pairs(status) do
-    if entry.code:sub(1, 1) ~= "D" and entry.code:sub(2, 2) ~= "D" then
-      paths[#paths + 1] = vim.fs.normalize(vim.fs.joinpath(root, path))
+---deletions (there is nothing left on disk to check), and the root of the
+---repository. Two git calls started together (`rev-parse --show-toplevel`,
+---which also tells whether this is a work tree at all, and `status`); the
+---editor does not wait, `done` comes from the event loop -- and only for the
+---newest request of the gate `name`.
+---@param name string the gate, for the ticket
+---@param done fun(paths: string[]|nil, root: string|nil, err: string|nil)
+local function changed_files(name, done)
+  local valid = gitq.ticket("status.gates." .. name)
+  gitq.all({
+    { args = { "rev-parse", "--show-toplevel" } },
+    { args = { "status", "--porcelain", "-z", "-u" }, opts = { read_only = true, binary = true } },
+  }, function(res)
+    if not valid() then return end
+    local root = gitq.line(res[1])
+    if not root then return done(nil, nil, gitq.failure(res[1], "not inside a git repository")) end
+    if res[2].code ~= 0 then
+      return done(nil, nil, "nothing to report (clean working tree, or not a git repo)")
     end
-  end
-  table.sort(paths)
-  return paths, nil
+    local status = git.parse_status(res[2].stdout)
+
+    local paths = {}
+    for path, entry in pairs(status) do
+      if entry.code:sub(1, 1) ~= "D" and entry.code:sub(2, 2) ~= "D" then
+        paths[#paths + 1] = vim.fs.normalize(vim.fs.joinpath(root, path))
+      end
+    end
+    table.sort(paths)
+    done(paths, root, nil)
+  end)
 end
 
 ---@internal
@@ -61,11 +77,18 @@ end
 ---via insights.nvim (optional soft dep).
 ---@return nil
 function M.todos()
-  local paths, err = changed_files()
-  if not paths then
-    notify.info("status: todos: " .. err)
-    return
-  end
+  changed_files("todos", function(paths, root, err)
+    if not paths then
+      notify.info("status: todos: " .. err)
+      return
+    end
+    run_todos(paths, root)
+  end)
+end
+
+---@param paths string[]
+---@param root string
+run_todos = function(paths, root)
   if #paths == 0 then
     notify.info("status: todos: no changed files to check")
     return
@@ -79,7 +102,6 @@ function M.todos()
     return
   end
 
-  local root = git.repo_root()
   local entries, scan_err = insights_todos.scan({ cwd = root })
   if scan_err then
     notify.error("status: todos: scan failed: " .. scan_err)
@@ -123,11 +145,17 @@ end
 ---dropped -- see the module doc for why they cannot be checked at all.
 ---@return nil
 function M.lint()
-  local paths, err = changed_files()
-  if not paths then
-    notify.info("status: lint: " .. err)
-    return
-  end
+  changed_files("lint", function(paths, _, err)
+    if not paths then
+      notify.info("status: lint: " .. err)
+      return
+    end
+    run_lint(paths)
+  end)
+end
+
+---@param paths string[]
+run_lint = function(paths)
   if #paths == 0 then
     notify.info("status: lint: no changed files to check")
     return
@@ -188,11 +216,17 @@ end
 ---are skipped, not read as text.
 ---@return nil
 function M.spell()
-  local paths, err = changed_files()
-  if not paths then
-    notify.info("status: spell: " .. err)
-    return
-  end
+  changed_files("spell", function(paths, _, err)
+    if not paths then
+      notify.info("status: spell: " .. err)
+      return
+    end
+    run_spell(paths)
+  end)
+end
+
+---@param paths string[]
+run_spell = function(paths)
   if #paths == 0 then
     notify.info("status: spell: no changed files to check")
     return

@@ -43,6 +43,7 @@ describe("gitsuite.features.ui.lazygit own float", function()
       return { bufnr = bufnr, winid = 0, job = 1 }
     end
     lazygit.open()
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
     assert.equals(1, #calls)
     local opts = calls[1]
@@ -62,6 +63,7 @@ describe("gitsuite.features.ui.lazygit own float", function()
   it("names an outdated lib.nvim instead of calling a missing spawn", function()
     libterm.spawn = nil
     local ok = pcall(lazygit.open)
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
     assert.is_true(ok, "no 'attempt to call a nil value'")
     assert.equals(1, #errors)
     assert.is_truthy(errors[1]:find("lib.nvim is too old", 1, true), errors[1])
@@ -73,6 +75,7 @@ describe("gitsuite.features.ui.lazygit own float", function()
       return nil, "failed to start lazygit"
     end
     lazygit.open()
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
     assert.equals(1, #calls)
     assert.same({ "ui lazygit: failed to start lazygit" }, errors)
   end)

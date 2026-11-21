@@ -29,22 +29,22 @@ return {
     { lua = [[_G.git(_G.repo, "checkout", "-q", "main"); _G.forget()]] },
     { keys = ":Git status repo<CR>" },
     {
-      expect = [[_G.noted("branch: main") and _G.noted("clean")]],
+      wait = [[_G.noted("branch: main") and _G.noted("clean")]],
       note = "a clean repository says so",
     },
     { lua = [[_G.forget()]] },
     { keys = ":Git status relink<CR>" },
     {
-      expect = [[_G.noted("filetree.nvim is not installed")]],
+      wait = [[_G.noted("filetree.nvim is not installed")]],
       note = "relink without filetree.nvim says what it needs",
     },
     { lua = [[_G.write(_G.repo .. "/notes.txt", { "one", "two changed", "three", "four" })]] },
     { lua = [[_G.forget()]] },
     { keys = ":Git status repo<CR>" },
-    { expect = [[_G.noted("dirty (1)")]], note = "an edited file makes it dirty (1)" },
+    { wait = [[_G.noted("dirty (1)")]], note = "an edited file makes it dirty (1)" },
     { keys = ":Git status quickfix<CR>" },
     {
-      expect = [[#vim.fn.getqflist() == 1 and vim.fn.getqflist()[1].text:find("notes.txt", 1, true) ~= nil]],
+      wait = [[#vim.fn.getqflist() == 1 and vim.fn.getqflist()[1].text:find("notes.txt", 1, true) ~= nil]],
       note = "quickfix holds the changed file",
     },
     {

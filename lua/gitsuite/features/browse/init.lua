@@ -15,7 +15,7 @@
 --- docmap.nvim needed the same remote-URL grammar this module used
 --- to own alone as `features/browse/url.lua`).
 
-local git = require("lib.nvim.git")
+local gitq = require("gitsuite.util.gitq")
 local url = require("lib.nvim.git.remote")
 local notify = require("gitsuite.util.notify")
 
@@ -35,39 +35,80 @@ end
 --- Resolve remote/host/branch/relative-path for the current buffer.
 --- Every failure reason is distinct (ERR-10/11) so the caller can say
 --- exactly what went wrong instead of one generic "browse failed".
+---
+--- The three git queries (`remote get-url`, `symbolic-ref`, `ls-files`) start
+--- together and the editor does not wait for them: `done` comes from the event
+--- loop. Only a detached HEAD costs a fourth call (`rev-parse --short HEAD`),
+--- after the others.
 ---@param bufnr integer
----@return { kind: "github"|"gitlab"|"codeberg", remote: { host: string, owner: string, repo: string }, branch: string, rel_path: string }|nil
----@return string|nil err
-local function resolve(bufnr)
+---@param done fun(r: { kind: "github"|"gitlab"|"codeberg", remote: { host: string, owner: string, repo: string }, branch: string, rel_path: string }|nil, err: string|nil)
+local function resolve(bufnr, done)
   local cfg = require("gitsuite.config").get()
   local dir, basename = file_location(bufnr)
-  if not dir then return nil, "buffer has no file" end
+  if not dir then return done(nil, "buffer has no file") end
 
-  local remote_url = git.remote_url("origin", { dir = dir })
-  if not remote_url then return nil, "no 'origin' remote" end
-  local remote = url.parse_remote(remote_url)
-  if not remote then return nil, "could not parse remote URL: " .. remote_url end
+  gitq.all({
+    -- `--`: a remote name is caller data and must not be readable as an option.
+    { args = { "remote", "get-url", "--", "origin" }, opts = { dir = dir } },
+    { args = { "symbolic-ref", "--short", "HEAD" }, opts = { dir = dir } },
+    { args = { "ls-files", "--full-name", "--", basename }, opts = { dir = dir } },
+  }, function(res)
+    if res[1].code == -1 or res[1].timed_out then return done(nil, gitq.failure(res[1], "")) end
+    local remote_url = gitq.line(res[1])
+    if not remote_url then return done(nil, "no 'origin' remote") end
+    local remote = url.parse_remote(remote_url)
+    if not remote then return done(nil, "could not parse remote URL: " .. remote_url) end
 
-  local kind = url.host_kind(remote.host, cfg.browse.hosts)
-  if not kind then
-    return nil, ("unrecognized host '%s' -- add it to browse.hosts in setup()"):format(remote.host)
-  end
+    local kind = url.host_kind(remote.host, cfg.browse.hosts)
+    if not kind then
+      return done(
+        nil,
+        ("unrecognized host '%s' -- add it to browse.hosts in setup()"):format(remote.host)
+      )
+    end
 
-  -- current_ref, not info(dir): info() always pays for a third, unused
-  -- `git describe --tags --always` call on top of the two (branch/commit)
-  -- actually needed here.
-  local branch = git.current_ref(dir)
-  if not branch then return nil, "could not determine a branch or commit to link against" end
+    local function finish(branch)
+      if not branch then
+        return done(nil, "could not determine a branch or commit to link against")
+      end
+      local rel_path = gitq.line(res[3])
+      if not rel_path then return done(nil, "file is not tracked by git") end
+      done({ kind = kind, remote = remote, branch = branch, rel_path = rel_path }, nil)
+    end
 
-  local rel_path = git.relative_path(basename, { dir = dir })
-  if not rel_path then return nil, "file is not tracked by git" end
-
-  return { kind = kind, remote = remote, branch = branch, rel_path = rel_path }, nil
+    -- The branch, or (detached HEAD) the short commit hash.
+    local branch = gitq.line(res[2])
+    if branch then return finish(branch) end
+    gitq.run({ "rev-parse", "--short", "HEAD" }, { dir = dir }, function(short)
+      finish(gitq.line(short))
+    end)
+  end)
 end
 
 ---@internal
+--- Resolve, then build and open the URL; a newer `:Git browse` wins over one
+--- that is still waiting for git (its late answer opens nothing).
+---@param build fun(r: table): string|nil, string|nil the URL, or nil and why not
+local function browse(build)
+  local valid = gitq.ticket("browse")
+  resolve(vim.api.nvim_get_current_buf(), function(r, err)
+    if not valid() then return end
+    if not r then
+      notify.error("browse: " .. err)
+      return
+    end
+    local web_url, why = build(r)
+    if not web_url then
+      notify.error("browse: " .. why)
+      return
+    end
+    M.open_url(web_url)
+  end)
+end
+
+---Open `web_url` in a browser through open.nvim.
 ---@param web_url string
-local function open_url(web_url)
+function M.open_url(web_url)
   local ok_req, open_registry = pcall(require, "open.registry")
   if not ok_req then
     notify.error(
@@ -86,46 +127,32 @@ end
 ---Open the current file on its web host (no line anchor).
 ---@return nil
 function M.file()
-  local r, err = resolve(vim.api.nvim_get_current_buf())
-  if not r then
-    notify.error("browse: " .. err)
-    return
-  end
-  open_url(url.build(r.kind, r.remote, r.branch, r.rel_path))
+  browse(function(r)
+    return url.build(r.kind, r.remote, r.branch, r.rel_path)
+  end)
 end
 
 ---Open the current visual selection (line range from the `'<`/`'>` marks)
----on its web host.
+---on its web host. The marks are read now, not when git answered.
 ---@return nil
 function M.selection()
-  local r, err = resolve(vim.api.nvim_get_current_buf())
-  if not r then
-    notify.error("browse: " .. err)
-    return
-  end
-
   local first = vim.fn.getpos("'<")[2]
   local last = vim.fn.getpos("'>")[2]
-  if first == 0 or last == 0 then
-    notify.error('browse: no visual selection ("\'<"/"\'>" not set)')
-    return
-  end
   if first > last then
     first, last = last, first
   end
-
-  open_url(url.build(r.kind, r.remote, r.branch, r.rel_path, first, last))
+  browse(function(r)
+    if first == 0 or last == 0 then return nil, 'no visual selection ("\'<"/"\'>" not set)' end
+    return url.build(r.kind, r.remote, r.branch, r.rel_path, first, last)
+  end)
 end
 
 ---Open the repository root on its web host.
 ---@return nil
 function M.repo()
-  local r, err = resolve(vim.api.nvim_get_current_buf())
-  if not r then
-    notify.error("browse: " .. err)
-    return
-  end
-  open_url(url.build(r.kind, r.remote, r.branch, nil))
+  browse(function(r)
+    return url.build(r.kind, r.remote, r.branch, nil)
+  end)
 end
 
 return M
