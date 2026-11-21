@@ -17,25 +17,25 @@ return {
     },
     { keys = ":Git hooks install<CR>" },
     {
-      expect = [[_G.noted("installed") and _G.hook("commit-msg") and _G.hook("pre-commit")]],
+      wait = [[_G.noted("installed") and _G.hook("commit-msg") and _G.hook("pre-commit")]],
       note = "install writes both wrappers into .git/hooks",
     },
     { lua = [[_G.forget()]] },
     { keys = ":Git hooks install<CR>" },
     {
-      expect = [[_G.noted("unchanged") and _G.noted("already installed") and not _G.noted("installed: ")]],
+      wait = [[_G.noted("unchanged") and _G.noted("already installed") and not _G.noted("installed: ")]],
       note = "a second install changes nothing",
     },
     { lua = [[_G.forget()]] },
     { keys = ":Git hooks list<CR>" },
     {
-      expect = [[_G.noted("commit-msg") and _G.noted("pre-commit")]],
+      wait = [[_G.noted("commit-msg") and _G.noted("pre-commit")]],
       note = "list names both hooks",
     },
     { lua = [[_G.forget()]] },
     { keys = ":Git hooks uninstall<CR>" },
     {
-      expect = [[not _G.hook("commit-msg") and not _G.hook("pre-commit")]],
+      wait = [[not _G.hook("commit-msg") and not _G.hook("pre-commit")]],
       note = "uninstall takes them out again",
     },
 
@@ -47,20 +47,20 @@ return {
     },
     { keys = ":Git hooks install<CR>" },
     {
-      expect = [[_G.noted("manual") and vim.uv.fs_stat(_G.repo .. "/.husky/commit-msg") == nil]],
+      wait = [[_G.noted("manual") and vim.uv.fs_stat(_G.repo .. "/.husky/commit-msg") == nil]],
       note = "install writes nothing there and says what to do by hand",
     },
     { lua = [[_G.forget()]] },
     { keys = ":Git hooks install --into-versioned<CR>" },
     {
-      expect = [[vim.uv.fs_stat(_G.repo .. "/.husky/commit-msg") ~= nil
+      wait = [[vim.uv.fs_stat(_G.repo .. "/.husky/commit-msg") ~= nil
         and vim.trim(vim.fn.system({ "git", "-C", _G.repo, "config", "--local", "--get-regexp", "^gitsuite\\.hook\\." })) ~= ""]],
       note = "--into-versioned adds the hook file and the script's path to the local config",
     },
     { lua = [[_G.forget()]] },
     { keys = ":Git hooks uninstall --into-versioned<CR>" },
     {
-      expect = [[vim.uv.fs_stat(_G.repo .. "/.husky/commit-msg") == nil]],
+      wait = [[vim.uv.fs_stat(_G.repo .. "/.husky/commit-msg") == nil]],
       note = "uninstall --into-versioned removes the hook file that held nothing else",
     },
   },

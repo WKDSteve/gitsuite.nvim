@@ -76,14 +76,33 @@ function M.script_path(entry)
   return vim.fs.normalize(root .. "/scripts/hooks/" .. entry.script)
 end
 
+---Deadline of every git call here.
+local TIMEOUT_MS = 10000
+
+---Runs `git -C <repo> <args>` and hands its result to `done`. Two of them exist, so that one sequence of steps
+---serves both forms: `sync_runner` waits (the Lua API, scripts, tests), `async_runner` answers from the event loop
+---(the `:Git hooks` commands, which must not freeze the editor).
+---@alias Gitsuite.Hooks.Runner fun(args: string[], done: fun(res: Lib.Git.RunResult))
+
 ---@param repo string
----@param ... string git arguments
----@return string|nil stdout trimmed, nil on a non-zero exit
-local function git(repo, ...)
-  local res = vim.system({ "git", "-C", repo, ... }, { text = true, timeout = 10000 }):wait()
-  if res.code ~= 0 then return nil end
-  return vim.trim(res.stdout or "")
+---@return Gitsuite.Hooks.Runner
+local function sync_runner(repo)
+  return function(args, done)
+    done(require("lib.nvim.git").run(args, { dir = repo, timeout_ms = TIMEOUT_MS }))
+  end
 end
+
+---@param repo string
+---@return Gitsuite.Hooks.Runner
+local function async_runner(repo)
+  return function(args, done)
+    require("lib.nvim.git").run_async(args, { dir = repo, timeout_ms = TIMEOUT_MS }, done)
+  end
+end
+
+---The keys `inspect` reads in one `git config` call: the hooks folder and gitsuite's own keys (git compares the
+---canonical, lower-case names).
+local CONFIG_PATTERN = [[^core\.hookspath$|^gitsuite\.hook\.]]
 
 ---`path` with every existing part resolved (symlinks, `/var` -> `/private/var`); the parts that do not exist
 ---yet are kept as they are. nil when not even the root exists.
@@ -135,26 +154,55 @@ end
 ---@field versioned { id: string, hook: string, file: string, state: "in-versioned"|"manual" }[]|nil only with a
 ---  `versioned_dir`: whether the hook file there holds gitsuite's line. Kept apart from `entries`, which `uninstall`
 ---  deletes whole files by: nothing in the versioned folder is ever deleted that way.
+---@field hook_config table<string, string> gitsuite's keys in the repository's local config (`gitsuite.hook.<id>`,
+---  lower case) and their values
 ---@field err string|nil
 
----What is installed in `repo`.
+---Why a git call that printed nothing failed: git missing, the deadline, or not a repository.
+---@param res Lib.Git.RunResult
 ---@param repo string
+---@return string
+local function failure(res, repo)
+  if res.timed_out then return ("git timed out after %d ms in %s"):format(TIMEOUT_MS, repo) end
+  if res.code == -1 then return "git could not be started: " .. vim.trim(res.stderr or "") end
+  return "not a git repository: " .. repo
+end
+
+---The inspection from the two answers of `inspect_with`.
+---@param repo string
+---@param rp Lib.Git.RunResult `rev-parse --git-common-dir --show-toplevel`
+---@param cfg Lib.Git.RunResult `config --show-scope --get-regexp CONFIG_PATTERN`
 ---@return Gitsuite.Hooks.Inspection
-function M.inspect(repo)
-  local result = { repo = repo, entries = {}, hooks_path_local = false }
-  local common = git(repo, "rev-parse", "--git-common-dir")
-  if not common then
-    result.err = "not a git repository: " .. repo
+local function build(repo, rp, cfg)
+  local result = { repo = repo, entries = {}, hooks_path_local = false, hook_config = {} }
+  -- A bare repository (or the .git folder itself) has no work tree: rev-parse prints the common dir, then fails
+  -- on --show-toplevel. The first line still counts; the top is then the folder itself, as before.
+  local lines = vim.split(rp.stdout or "", "\n", { plain = true, trimempty = true })
+  local common = lines[1] and vim.trim(lines[1]) or ""
+  if common == "" then
+    result.err = failure(rp, repo)
     return result
   end
+  local top = (rp.code == 0 and lines[2]) and vim.trim(lines[2]) or repo
   if not (common:match("^/") or common:match("^%a:[/\\]")) then common = repo .. "/" .. common end
   result.hooks_dir = vim.fs.normalize(common .. "/hooks")
-  result.hooks_path = git(repo, "config", "--get", "core.hooksPath")
+
+  -- `scope<TAB>key value`, in the order git reads its files: the last core.hooksPath wins, as with --get. Exit 1
+  -- means none of the keys is set; any other failure is read as "not set" too, as the single calls did.
+  if cfg.code == 0 then
+    for _, line in ipairs(vim.split(cfg.stdout or "", "\n", { plain = true, trimempty = true })) do
+      local scope, key, value = line:gsub("\r$", ""):match("^(%S+)\t(%S+) ?(.*)$")
+      if key == "core.hookspath" then
+        result.hooks_path = value
+        if scope == "local" then result.hooks_path_local = true end
+      elseif key and scope == "local" then
+        result.hook_config[key:lower()] = value
+      end
+    end
+  end
   if result.hooks_path == "" then result.hooks_path = nil end
-  result.hooks_path_local = git(repo, "config", "--local", "--get", "core.hooksPath") ~= nil
   if result.hooks_path_local and result.hooks_path then
     -- git reads a relative core.hooksPath from the top of the work tree, and expands a leading ~.
-    local top = git(repo, "rev-parse", "--show-toplevel") or repo
     local dir = result.hooks_path:gsub("^~", (vim.fn.expand("~"):gsub("%%", "%%%%")))
     if not (dir:match("^/") or dir:match("^%a:[/\\]")) then dir = top .. "/" .. dir end
     dir = vim.fs.normalize(dir)
@@ -185,6 +233,47 @@ function M.inspect(repo)
     end
   end
   return result
+end
+
+---Two git calls, started together: the folders (`rev-parse`) and every config key that matters (`config`).
+---@param repo string
+---@param run Gitsuite.Hooks.Runner
+---@param done fun(info: Gitsuite.Hooks.Inspection)
+local function inspect_with(repo, run, done)
+  local rp, cfg
+  -- +1 for this function itself: a runner that answers at once must not finish before the second call started.
+  local pending = 3
+  local function settle()
+    pending = pending - 1
+    if pending == 0 then done(build(repo, rp, cfg)) end
+  end
+  run({ "rev-parse", "--git-common-dir", "--show-toplevel" }, function(res)
+    rp = res
+    settle()
+  end)
+  run({ "config", "--show-scope", "--get-regexp", CONFIG_PATTERN }, function(res)
+    cfg = res
+    settle()
+  end)
+  settle()
+end
+
+---What is installed in `repo`. Waits for git; the commands use `inspect_async`.
+---@param repo string
+---@return Gitsuite.Hooks.Inspection
+function M.inspect(repo)
+  local info
+  inspect_with(repo, sync_runner(repo), function(i)
+    info = i
+  end)
+  return info
+end
+
+---`inspect` without waiting: `done` is called from the event loop.
+---@param repo string
+---@param done fun(info: Gitsuite.Hooks.Inspection)
+function M.inspect_async(repo, done)
+  inspect_with(repo, async_runner(repo), done)
 end
 
 ---@class Gitsuite.Hooks.Result
@@ -228,18 +317,47 @@ local function snippet(entry)
   )
 end
 
----Set the local config key of `entry` to the script of this checkout, unless it already is.
----@param repo string
+---A change of the local config, made after the files are written: `run_writes` runs them one after another (git
+---locks the config file while it writes) and turns a failure into an error of `r`.
+---@class Gitsuite.Hooks.Write
+---@field args string[]
+---@field r Gitsuite.Hooks.Result
+---@field err string|nil the message of a failure; nil: a failure does not matter
+
+---Queue setting the local config key of `entry` to the script of this checkout, unless it already is.
+---@param info Gitsuite.Hooks.Inspection
 ---@param entry Gitsuite.Hooks.Entry
+---@param r Gitsuite.Hooks.Result
+---@param writes Gitsuite.Hooks.Write[]
 ---@return boolean changed
----@return string|nil err
-local function set_config(repo, entry)
-  local want = M.script_path(entry)
-  if git(repo, "config", "--local", "--get", M.config_key(entry)) == want then return false, nil end
-  if git(repo, "config", "--local", M.config_key(entry), want) == nil then
-    return false, "cannot set " .. M.config_key(entry) .. " in the local config"
+local function set_config(info, entry, r, writes)
+  local want, key = M.script_path(entry), M.config_key(entry)
+  if info.hook_config[key:lower()] == want then return false end
+  writes[#writes + 1] = {
+    args = { "config", "--local", key, want },
+    r = r,
+    err = "cannot set " .. key .. " in the local config",
+  }
+  return true
+end
+
+---@param writes Gitsuite.Hooks.Write[]
+---@param run Gitsuite.Hooks.Runner
+---@param done fun()
+local function run_writes(writes, run, done)
+  local i = 0
+  local function next_write()
+    i = i + 1
+    local w = writes[i]
+    if not w then return done() end
+    run(w.args, function(res)
+      if res.code ~= 0 and w.err then
+        w.r.status, w.r.message = "error", w.err
+      end
+      next_write()
+    end)
   end
-  return true, nil
+  next_write()
 end
 
 ---The shebang of a hook file `into_versioned` creates.
@@ -280,7 +398,8 @@ end
 ---@param info Gitsuite.Hooks.Inspection
 ---@param entry Gitsuite.Hooks.Entry
 ---@param r Gitsuite.Hooks.Result
-local function add_to_versioned(info, entry, r)
+---@param writes Gitsuite.Hooks.Write[]
+local function add_to_versioned(info, entry, r, writes)
   local file = info.versioned_dir .. "/" .. entry.hook
   local why = refuse(file)
   if why then
@@ -302,10 +421,7 @@ local function add_to_versioned(info, entry, r)
     end
   end
   if found and current and select(2, text:gsub(vim.pesc(entry.marker), "")) == 1 then
-    local changed, cerr = set_config(info.repo, entry)
-    if cerr then
-      r.status, r.message = "error", cerr
-    elseif changed then
+    if set_config(info, entry, r, writes) then
       r.status, r.message =
         "updated",
         ("the line is in %s; set %s in the local config"):format(file, M.config_key(entry))
@@ -334,11 +450,7 @@ local function add_to_versioned(info, entry, r)
     return
   end
   if not exists then pcall(vim.uv.fs_chmod, file, tonumber("755", 8)) end
-  local _, cerr = set_config(info.repo, entry)
-  if cerr then
-    r.status, r.message = "error", cerr
-    return
-  end
+  set_config(info, entry, r, writes)
   r.status = found and "updated" or "installed"
   r.message = ("%s %s (core.hooksPath = %s is versioned: review the change and commit it yourself)"):format(
     found and "updated the line in" or "added to",
@@ -352,14 +464,17 @@ end
 ---@param info Gitsuite.Hooks.Inspection
 ---@param entry Gitsuite.Hooks.Entry
 ---@param r Gitsuite.Hooks.Result
-local function remove_from_versioned(info, entry, r)
+---@param writes Gitsuite.Hooks.Write[]
+local function remove_from_versioned(info, entry, r, writes)
   local file = info.versioned_dir .. "/" .. entry.hook
   local why = refuse(file)
   if why then
     r.status, r.message = "error", why
     return
   end
-  git(info.repo, "config", "--local", "--unset", M.config_key(entry))
+  if info.hook_config[M.config_key(entry):lower()] ~= nil then
+    writes[#writes + 1] = { args = { "config", "--local", "--unset", M.config_key(entry) }, r = r }
+  end
   local text = read(file)
   if not text:find(entry.marker, 1, true) then
     r.status, r.message = "absent", "not in " .. file
@@ -384,17 +499,15 @@ local function remove_from_versioned(info, entry, r)
     "removed", "removed gitsuite's line from " .. file .. " (versioned: commit it yourself)"
 end
 
----Install hooks into one repository. Never overwrites a foreign hook; leaves a repository with its own
----`core.hooksPath` alone and says what to add by hand, unless `opts.into_versioned` asks to add it there.
----@param repo string
----@param ids string[]|nil nil = every shipped hook
+---The files part of `install`; the config changes it needs go to `writes`.
+---@param info Gitsuite.Hooks.Inspection
+---@param ids string[]|nil
 ---@param opts Gitsuite.Hooks.Opts|nil
+---@param writes Gitsuite.Hooks.Write[]
 ---@return Gitsuite.Hooks.Result[]
-function M.install(repo, ids, opts)
-  local info = M.inspect(repo)
+local function apply_install(info, ids, opts, writes)
+  local repo = info.repo
   local results = {}
-  if info.err then return { { repo = repo, id = "*", status = "error", message = info.err } } end
-
   for _, e in ipairs(CATALOG) do
     if not ids or vim.tbl_contains(ids, e.id) then
       local file = info.hooks_dir .. "/" .. e.hook
@@ -404,7 +517,7 @@ function M.install(repo, ids, opts)
       end
       local r = { repo = repo, id = e.id }
       if info.hooks_path_local and info.versioned_dir and opts and opts.into_versioned then
-        add_to_versioned(info, e, r)
+        add_to_versioned(info, e, r, writes)
       elseif info.hooks_path_local and not info.versioned_dir then
         r.status = "manual"
         r.message = (
@@ -452,15 +565,14 @@ function M.install(repo, ids, opts)
   return results
 end
 
----Remove gitsuite's own hooks from one repository; a foreign hook is never removed. With `opts.into_versioned`
----and a versioned `core.hooksPath`, gitsuite's line is taken out of the hook file there instead.
----@param repo string
----@param ids string[]|nil nil = every shipped hook
+---The files part of `uninstall`; the config changes it needs go to `writes`.
+---@param info Gitsuite.Hooks.Inspection
+---@param ids string[]|nil
 ---@param opts Gitsuite.Hooks.Opts|nil
+---@param writes Gitsuite.Hooks.Write[]
 ---@return Gitsuite.Hooks.Result[]
-function M.uninstall(repo, ids, opts)
-  local info = M.inspect(repo)
-  if info.err then return { { repo = repo, id = "*", status = "error", message = info.err } } end
+local function apply_uninstall(info, ids, opts, writes)
+  local repo = info.repo
   local results = {}
   for _, e in ipairs(CATALOG) do
     if not ids or vim.tbl_contains(ids, e.id) then
@@ -471,7 +583,7 @@ function M.uninstall(repo, ids, opts)
       end
       local r = { repo = repo, id = e.id }
       if info.hooks_path_local and info.versioned_dir and opts and opts.into_versioned then
-        remove_from_versioned(info, e, r)
+        remove_from_versioned(info, e, r, writes)
       elseif state == "ours" then
         vim.uv.fs_unlink(file)
         r.status, r.message = "removed", "removed " .. file
@@ -484,6 +596,103 @@ function M.uninstall(repo, ids, opts)
     end
   end
   return results
+end
+
+---Inspect, change the files, then the config: the steps of `install` and `uninstall`, for either runner.
+---@param repo string
+---@param run Gitsuite.Hooks.Runner
+---@param apply fun(info: Gitsuite.Hooks.Inspection, writes: Gitsuite.Hooks.Write[]): Gitsuite.Hooks.Result[]
+---@param done fun(results: Gitsuite.Hooks.Result[])
+local function act_with(repo, run, apply, done)
+  inspect_with(repo, run, function(info)
+    if info.err then
+      return done({ { repo = repo, id = "*", status = "error", message = info.err } })
+    end
+    local writes = {}
+    local results = apply(info, writes)
+    run_writes(writes, run, function()
+      done(results)
+    end)
+  end)
+end
+
+---@param repo string
+---@param apply fun(info: Gitsuite.Hooks.Inspection, writes: Gitsuite.Hooks.Write[]): Gitsuite.Hooks.Result[]
+---@return Gitsuite.Hooks.Result[]
+local function act_sync(repo, apply)
+  local out
+  act_with(repo, sync_runner(repo), apply, function(results)
+    out = results
+  end)
+  return out
+end
+
+---Install hooks into one repository. Never overwrites a foreign hook; leaves a repository with its own
+---`core.hooksPath` alone and says what to add by hand, unless `opts.into_versioned` asks to add it there. Waits
+---for git; `:Git hooks install` uses `install_async`.
+---@param repo string
+---@param ids string[]|nil nil = every shipped hook
+---@param opts Gitsuite.Hooks.Opts|nil
+---@return Gitsuite.Hooks.Result[]
+function M.install(repo, ids, opts)
+  return act_sync(repo, function(info, writes)
+    return apply_install(info, ids, opts, writes)
+  end)
+end
+
+---`install` without waiting: `done` is called from the event loop.
+---@param repo string
+---@param ids string[]|nil
+---@param opts Gitsuite.Hooks.Opts|nil
+---@param done fun(results: Gitsuite.Hooks.Result[])
+function M.install_async(repo, ids, opts, done)
+  act_with(repo, async_runner(repo), function(info, writes)
+    return apply_install(info, ids, opts, writes)
+  end, done)
+end
+
+---Remove gitsuite's own hooks from one repository; a foreign hook is never removed. With `opts.into_versioned`
+---and a versioned `core.hooksPath`, gitsuite's line is taken out of the hook file there instead. Waits for git;
+---`:Git hooks uninstall` uses `uninstall_async`.
+---@param repo string
+---@param ids string[]|nil nil = every shipped hook
+---@param opts Gitsuite.Hooks.Opts|nil
+---@return Gitsuite.Hooks.Result[]
+function M.uninstall(repo, ids, opts)
+  return act_sync(repo, function(info, writes)
+    return apply_uninstall(info, ids, opts, writes)
+  end)
+end
+
+---`uninstall` without waiting: `done` is called from the event loop.
+---@param repo string
+---@param ids string[]|nil
+---@param opts Gitsuite.Hooks.Opts|nil
+---@param done fun(results: Gitsuite.Hooks.Result[])
+function M.uninstall_async(repo, ids, opts, done)
+  act_with(repo, async_runner(repo), function(info, writes)
+    return apply_uninstall(info, ids, opts, writes)
+  end, done)
+end
+
+---`each` without waiting: one repository after the other (each one's git calls are few, and starting a process
+---blocks on Windows), `done` once with every result, in the order of `repos`.
+---@param repos string[]
+---@param fn fun(repo: string, ids: string[]|nil, opts: Gitsuite.Hooks.Opts|nil, done: fun(results: Gitsuite.Hooks.Result[]))
+---@param ids string[]|nil
+---@param opts Gitsuite.Hooks.Opts|nil
+---@param done fun(results: Gitsuite.Hooks.Result[])
+function M.each_async(repos, fn, ids, opts, done)
+  local all, i = {}, 0
+  local function next_repo()
+    i = i + 1
+    if not repos[i] then return done(all) end
+    fn(repos[i], ids, opts, function(results)
+      vim.list_extend(all, results)
+      next_repo()
+    end)
+  end
+  next_repo()
 end
 
 ---Run install/uninstall over several repositories.

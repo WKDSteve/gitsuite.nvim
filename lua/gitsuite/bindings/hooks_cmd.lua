@@ -41,35 +41,48 @@ function M.run(action, flags)
   end
   local ids = flags and flags.hook and { flags.hook } or nil
   local opts = { into_versioned = flags and flags["into-versioned"] == true }
-  local results =
-    hooks.each(repos, action == "install" and hooks.install or hooks.uninstall, ids, opts)
-  local level = vim.log.levels.INFO
-  for _, r in ipairs(results) do
-    if r.status == "error" or r.status == "foreign" or r.status == "manual" then
-      level = vim.log.levels.WARN
+  -- Asynchronous: the editor keeps running while git answers (with --all, one repository after the other), the
+  -- report comes once at the end.
+  local fn = action == "install" and hooks.install_async or hooks.uninstall_async
+  hooks.each_async(repos, fn, ids, opts, function(results)
+    local level = vim.log.levels.INFO
+    for _, r in ipairs(results) do
+      if r.status == "error" or r.status == "foreign" or r.status == "manual" then
+        level = vim.log.levels.WARN
+      end
     end
-  end
-  say(hooks.format(results), level)
+    say(hooks.format(results), level)
+  end)
 end
 
 ---@param repo string|nil
 function M.list(repo)
   local path = repo and vim.fs.normalize(vim.fn.fnamemodify(repo, ":p")) or current_repo()
-  local lines, err = M.list_lines(path)
-  if not lines then
-    say(err or ("hooks: cannot inspect " .. path), vim.log.levels.WARN)
-    return
-  end
-  say(table.concat(lines, "\n"), vim.log.levels.INFO)
+  require("gitsuite.features.hooks").inspect_async(path, function(info)
+    local lines, err = M.lines_of(path, info)
+    if not lines then
+      say(err or ("hooks: cannot inspect " .. path), vim.log.levels.WARN)
+      return
+    end
+    say(table.concat(lines, "\n"), vim.log.levels.INFO)
+  end)
 end
 
----The report of `:Git hooks list` for one repository.
+---The report of `:Git hooks list` for one repository (waits for git; `list` does not).
 ---@param path string
 ---@return string[]|nil lines
 ---@return string|nil err
 function M.list_lines(path)
+  return M.lines_of(path, require("gitsuite.features.hooks").inspect(path))
+end
+
+---The report of `:Git hooks list` from an inspection.
+---@param path string
+---@param info Gitsuite.Hooks.Inspection
+---@return string[]|nil lines
+---@return string|nil err
+function M.lines_of(path, info)
   local hooks = require("gitsuite.features.hooks")
-  local info = hooks.inspect(path)
   if info.err then return nil, info.err end
   -- With a core.hooksPath of the repository's own, git never reads .git/hooks/: what counts is the line in the
   -- versioned folder, or `manual` for a folder outside the work tree (gitsuite writes nothing there).
