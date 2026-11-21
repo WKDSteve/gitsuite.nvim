@@ -37,6 +37,7 @@ describe("gitsuite.features.ui", function()
     end
 
     local ok = pcall(ui.lazygit)
+    assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
     vim.fn.executable = original_executable
     assert.is_true(ok)
@@ -226,11 +227,13 @@ describe("gitsuite.features.ui", function()
 
     it("a directory outside any repository -> error, no float", function()
       ui.lazygit(scratch)
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       assert_error_and_no_float("not inside a git repository")
     end)
 
     it("a path that does not exist -> error, no float", function()
       ui.lazygit(scratch .. "/nope")
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       assert_error_and_no_float("not a directory")
     end)
 
@@ -238,6 +241,7 @@ describe("gitsuite.features.ui", function()
       local file = scratch .. "/file.txt"
       vim.fn.writefile({ "x" }, file)
       ui.lazygit(file)
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       assert_error_and_no_float("not a directory")
     end)
 
@@ -247,6 +251,7 @@ describe("gitsuite.features.ui", function()
       vim.fn.mkdir(repo .. "/sub/deep", "p")
 
       ui.lazygit(repo .. "/sub/deep")
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
       assert.equals(0, #errors, table.concat(errors, "\n"))
       assert.equals(1, #spawned)
@@ -263,6 +268,7 @@ describe("gitsuite.features.ui", function()
       vim.cmd("cd " .. vim.fn.fnameescape(repo))
 
       ui.lazygit()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
       assert.equals(0, #errors, table.concat(errors, "\n"))
       assert.equals(1, #spawned)
@@ -272,6 +278,7 @@ describe("gitsuite.features.ui", function()
     it("without an argument outside any repository -> error, no float", function()
       vim.cmd("cd " .. vim.fn.fnameescape(scratch))
       ui.lazygit()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       assert_error_and_no_float("not inside a git repository")
     end)
 
@@ -281,6 +288,7 @@ describe("gitsuite.features.ui", function()
       git_init(repo)
 
       vim.cmd("Git ui lazygit " .. vim.fn.fnameescape(vim.fs.normalize(repo)))
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       assert.equals(0, #errors, table.concat(errors, "\n"))
       assert.equals(1, #spawned)
       assert.equals(real(repo), real(spawned[1].argv[3]), "the <dir> argument reaches lazygit")
@@ -289,6 +297,7 @@ describe("gitsuite.features.ui", function()
       spawned = {}
       vim.cmd("stopinsert")
       vim.cmd("Git ui lazygit")
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
       assert.equals(1, #spawned)
       assert.equals(real(original_cwd), real(spawned[1].argv[3]))
     end)
@@ -315,6 +324,7 @@ describe("gitsuite.features.ui", function()
         vim.fn.mkdir(repo .. "/sub", "p")
 
         ui.lazygit(repo .. "/sub")
+        assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
         assert.equals(0, #errors, table.concat(errors, "\n"))
         assert.equals(0, #spawned, "the own jobstart route is not used")
@@ -352,6 +362,7 @@ describe("gitsuite.features.ui", function()
         git_init(repo)
 
         ui.lazygit(repo)
+        assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
         assert.equals(1, #runs)
         assert.is_nil(runs[1].opts.env)
@@ -370,6 +381,7 @@ describe("gitsuite.features.ui", function()
         git_init(repo)
 
         ui.lazygit(repo)
+        assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
         assert.equals(1, #runs)
         assert.equals(1, #spawned, "the own jobstart route is used")
@@ -386,6 +398,7 @@ describe("gitsuite.features.ui", function()
         git_init(repo)
 
         ui.lazygit(repo)
+        assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
         assert.equals(1, #errors)
         assert.is_truthy(errors[1]:find("terminal.nvim failed", 1, true), errors[1])
@@ -447,7 +460,9 @@ describe("gitsuite.features.ui", function()
           git_init(repo)
 
           ui.lazygit(repo)
+          assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
           ui.lazygit(repo)
+          assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
           assert.equals(1, #runs, "the running lazygit is not replaced")
           assert.equals(1, #opens)
@@ -462,7 +477,9 @@ describe("gitsuite.features.ui", function()
           git_init(repo_b)
 
           ui.lazygit(repo_a)
+          assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
           ui.lazygit(repo_b)
+          assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
           assert.equals(2, #runs)
           assert.equals(0, #opens)
@@ -476,11 +493,13 @@ describe("gitsuite.features.ui", function()
           add({ name = "lazygit", backend = "native", bufnr = vim.api.nvim_create_buf(false, true) })
 
           ui.lazygit(repo)
+          assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
           assert.equals(1, #runs, "the restored terminal is replaced")
           assert.equals(0, #opens)
 
           registry[1].exited = true
           ui.lazygit(repo)
+          assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
           assert.equals(2, #runs, "an exited lazygit is not shown again")
           assert.equals(0, #opens)
         end)
@@ -490,6 +509,7 @@ describe("gitsuite.features.ui", function()
         local repo = scratch .. "/repo"
         git_init(repo)
         ui.lazygit(repo)
+        assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
         assert.equals(1, #runs)
 
         local buf = vim.api.nvim_create_buf(false, true)
@@ -511,6 +531,7 @@ describe("gitsuite.features.ui", function()
         git_init(repo)
 
         ui.lazygit(repo)
+        assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
 
         assert.equals(0, #runs)
         assert.equals(1, #spawned, "the own jobstart route is used")
