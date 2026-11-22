@@ -4,12 +4,16 @@
 --- The `:Git status`, `:Git browse` and `:Git ui lazygit` commands used to ask git several times in a row, each
 --- call blocking the editor. This module runs them through `lib.nvim.git.run_async` instead:
 ---
----   * `all` starts several queries at once and answers once, when the last one is back.
+---   * `all` starts several queries at once and answers once, when the last one is back (`lib.nvim.async.all`).
+---   * `idle` is true once no query and no answer of `all` is still to come (`lib.nvim.async.in_flight`).
 ---   * `ticket` lets a newer request of the same command win: the answer of an older one is dropped, so a late
----     answer never opens a browser, a terminal or a quickfix list the user already asked for again.
+---     answer never opens a browser, a terminal or a quickfix list the user already asked for again
+---     (`lib.nvim.async.latest_wins`, one gate keyed by command).
 ---   * `failure` names why a query failed (git missing, the deadline, git's own message).
 
 local M = {}
+
+local async = require("lib.nvim.async")
 
 ---Deadline of one query: these are quick reads of a local repository.
 M.TIMEOUT_MS = 10000
@@ -18,47 +22,46 @@ M.TIMEOUT_MS = 10000
 ---@field args string[] what comes after `git`
 ---@field opts? Lib.Git.RunOpts `dir`, `read_only`, ...
 
----Queries started and not answered yet.
-local inflight = 0
+---Queries and `all` answers still to come. A tracked callback is uncounted only after it returned, so a query
+---started from an answer keeps the count up: idle means the whole chain is done.
+local flight = async.in_flight()
+
+---One gate for every command; `ticket(key)` supersedes only tickets of the same key.
+local gate = async.latest_wins()
 
 ---Run one query; `done` is called from the event loop.
 ---@param args string[]
 ---@param opts Lib.Git.RunOpts|nil
 ---@param done fun(res: Lib.Git.RunResult)
+---@return { stop: fun() }|nil handle kills git and drops its answer
 function M.run(args, opts, done)
   local o = vim.tbl_extend("keep", opts or {}, { timeout_ms = M.TIMEOUT_MS })
-  inflight = inflight + 1
-  require("lib.nvim.git").run_async(args, o, function(res)
-    inflight = inflight - 1
-    done(res)
-  end)
+  return require("lib.nvim.git").run_async(args, o, flight:track(done))
 end
 
 ---Whether no query is waiting for git: what a test waits for (`vim.wait(ms, gitq.idle)`) after a command. A
 ---query started from an answer counts before that answer returns, so idle means the whole chain is done.
 ---@return boolean
 function M.idle()
-  return inflight == 0
+  return flight:idle()
 end
 
----Start every query at once; `done` gets their results in the order of `queries`, once.
+---Start every query at once; `done` gets their results in the order of `queries`, once, on a later tick.
 ---@param queries Gitsuite.Gitq.Query[]
 ---@param done fun(results: Lib.Git.RunResult[])
+---@return { stop: fun() } handle kills the queries still running; `done` is then called with what was back
 function M.all(queries, done)
-  local results = {}
-  -- +1 for this function itself: an answer that comes at once must not finish before the last query started.
-  local pending = #queries + 1
-  local function settle()
-    pending = pending - 1
-    if pending == 0 then done(results) end
-  end
+  local tasks = {}
   for i, q in ipairs(queries) do
-    M.run(q.args, q.opts, function(res)
-      results[i] = res
-      settle()
-    end)
+    tasks[i] = function(settle)
+      return M.run(q.args, q.opts, function(res)
+        settle(res)
+      end)
+    end
   end
-  settle()
+  return async.all(tasks, function(results)
+    done(results)
+  end, { in_flight = flight })
 end
 
 ---The first line of a successful query, trimmed; nil when it failed or printed nothing.
@@ -80,18 +83,11 @@ function M.failure(res, fallback)
   return fallback
 end
 
----@type table<string, integer>
-local generation = {}
-
 ---A ticket for one request of command `key`: `valid()` is true until the next ticket of the same key is drawn.
 ---@param key string
 ---@return fun(): boolean valid
 function M.ticket(key)
-  generation[key] = (generation[key] or 0) + 1
-  local mine = generation[key]
-  return function()
-    return generation[key] == mine
-  end
+  return gate:ticket(key)
 end
 
 return M
