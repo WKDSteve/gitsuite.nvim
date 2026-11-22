@@ -12,6 +12,20 @@ local fn = vim.fn
 
 local M = {}
 
+---Resolve a path lazygit handed over. A repo-relative one is taken below the
+---root of the running lazygit, which gitsuite.nvim already knows
+---(`lazygit.root()`); only without one does lib.nvim ask git for the root of
+---the cwd (a blocking `rev-parse --show-toplevel`). An absolute path is kept.
+---@param raw string repo-root-relative or absolute path
+---@return string absolute path
+function M.resolve(raw)
+  local root = require("gitsuite.features.ui.lazygit").root()
+  if not root or fn.isabsolutepath(raw) == 1 or raw:match("^[\\/]") then return resolve(raw) end
+  local below = root .. "/" .. raw
+  if fn.filereadable(below) == 1 then return below end
+  return fn.fnamemodify(raw, ":p")
+end
+
 ---@param raw string path from lazygit (repo-root-relative or absolute)
 ---@return boolean ok
 function M.run(raw)
@@ -20,7 +34,7 @@ function M.run(raw)
     return false
   end
 
-  local path = resolve(raw)
+  local path = M.resolve(raw)
   if fn.filereadable(path) ~= 1 then
     notify.warn(("lazygit badd: file not readable: %s"):format(path))
     return false

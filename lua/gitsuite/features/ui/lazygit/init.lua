@@ -97,6 +97,23 @@ local TERM_NAME = "lazygit"
 local MARKER = "gitsuite_lazygit_root"
 
 ---@internal
+--- The repo root of the lazygit gitsuite.nvim opened last: the bridge's
+--- fallback when the focused buffer is not its terminal (a multiplexer pane).
+---@type string|nil
+local last_root = nil
+
+---The repo root of the running lazygit, for the nvr bridge (badd/replace)
+---to resolve lazygit's repo-relative paths without asking git: the root of
+---the focused lazygit terminal, else the one gitsuite.nvim opened last; nil
+---when gitsuite.nvim opened none.
+---@return string|nil
+function M.root()
+  local here = vim.b[vim.api.nvim_get_current_buf()][MARKER]
+  if type(here) == "string" and here ~= "" then return here end
+  return last_root
+end
+
+---@internal
 --- The live lazygit terminal gitsuite.nvim started for `root` in this
 --- project, when terminal.nvim keeps one (hidden by `q`, or visible).
 --- Native backend only: that is where `q` hides a terminal whose job keeps
@@ -199,6 +216,7 @@ local function open_own_float(repo_dir)
     title = " lazygit ",
     close_on_exit = "always",
     on_open = function(bufnr)
+      vim.b[bufnr][MARKER] = repo_dir
       setup_terminal_keymaps(bufnr)
     end,
   })
@@ -232,6 +250,7 @@ function M.open(repo_dir)
       notify.error("ui lazygit: " .. err)
       return
     end
+    last_root = root
     -- terminal.nvim first; when it is missing or did not start lazygit (it
     -- reported why), the own float.
     local term = terminal_facade()

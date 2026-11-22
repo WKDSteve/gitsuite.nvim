@@ -56,6 +56,13 @@ describe("gitsuite.features.ui.lazygit own float", function()
       #vim.api.nvim_buf_get_keymap(calls.bufnr, "t") > 0,
       "on_open put the terminal-mode keymaps on the buffer"
     )
+    -- The nvr bridge (badd/replace) resolves lazygit's paths below this root instead of asking git.
+    assert.equals(
+      opts.cwd,
+      vim.b[calls.bufnr].gitsuite_lazygit_root,
+      "on_open marked the buffer with the root"
+    )
+    assert.equals(opts.cwd, lazygit.root(), "the root of the lazygit opened last is known")
     assert.same({}, errors)
     vim.api.nvim_buf_delete(calls.bufnr, { force = true })
   end)

@@ -16,7 +16,6 @@
 --- back to a plain badd so nothing is lost.
 
 local notify = require("gitsuite.util.notify")
-local resolve = require("lib.nvim.fs.path").from_repo_relative
 local normal = require("lib.nvim.buf_win_tab.normal_buffer")
 local badd = require("gitsuite.features.ui.lazygit.badd")
 
@@ -32,7 +31,7 @@ function M.run(raw)
     return false
   end
 
-  local path = resolve(raw)
+  local path = badd.resolve(raw)
   if fn.filereadable(path) ~= 1 then
     notify.warn(("lazygit replace: file not readable: %s"):format(path))
     return false

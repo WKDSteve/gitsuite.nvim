@@ -150,7 +150,12 @@ describe("gitsuite.features.hunk", function()
           package.loaded["gitsigns"] = fake_gitsigns(nil)
           hunk[action]()
 
-          assert.is_not_nil(captured)
+          assert(
+            vim.wait(10000, function()
+              return captured ~= nil
+            end),
+            "GitsuiteStatusChanged never fired"
+          )
           assert.equals(expected_dir, captured.dir)
         end
       )
@@ -159,9 +164,65 @@ describe("gitsuite.features.hunk", function()
         package.loaded["gitsigns"] = fake_gitsigns("boom")
         hunk[action]()
 
+        assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git still busy")
         assert.is_nil(captured)
       end)
     end
+
+    describe("the repo root of the event", function()
+      local real_system = vim.system
+      local starts
+
+      before_each(function()
+        starts = {}
+        vim.system = function(cmd, _, on_exit)
+          starts[#starts + 1] = { cmd = cmd, on_exit = on_exit }
+          return {
+            pid = 4242,
+            wait = function()
+              error("vim.system():wait() called: the editor would freeze")
+            end,
+            kill = function() end,
+            is_closing = function()
+              return false
+            end,
+          }
+        end
+      end)
+
+      after_each(function()
+        vim.system = real_system
+        -- The outer after_each may have wiped the buffer already.
+        if vim.api.nvim_buf_is_valid(bufnr) then vim.b[bufnr].gitsigns_status_dict = nil end
+      end)
+
+      it("comes from gitsigns' buffer status without starting git", function()
+        vim.b[bufnr].gitsigns_status_dict = { root = "/known/root", head = "main" }
+        package.loaded["gitsigns"] = fake_gitsigns(nil)
+        hunk.stage()
+
+        assert.equals(0, #starts, "no git start: " .. vim.inspect(starts))
+        assert.is_not_nil(captured)
+        assert.equals("/known/root", captured.dir)
+      end)
+
+      it("without one, git is asked once after the write and the editor does not wait", function()
+        package.loaded["gitsigns"] = fake_gitsigns(nil)
+        hunk.stage_buffer()
+
+        assert.equals(1, #starts)
+        assert.truthy(vim.tbl_contains(starts[1].cmd, "--show-toplevel"))
+        assert.is_nil(captured, "no event before git answered")
+        starts[1].on_exit({ code = 0, signal = 0, stdout = "/asked/root\n", stderr = "" })
+        assert(
+          vim.wait(5000, function()
+            return captured ~= nil
+          end),
+          "GitsuiteStatusChanged never fired"
+        )
+        assert.equals("/asked/root", captured.dir)
+      end)
+    end)
 
     -- reset()/reset_buffer() never fire GitsuiteStatusChanged: gitsigns'
     -- reset only rewrites the buffer's in-memory lines (found in a

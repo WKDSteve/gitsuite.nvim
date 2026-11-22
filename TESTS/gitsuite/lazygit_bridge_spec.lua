@@ -96,4 +96,74 @@ describe("gitsuite.features.ui.lazygit bridge", function()
       vim.bo[original_buf].modified = false -- so :bdelete/test teardown never prompts
     end)
   end)
+
+  -- lazygit hands over repo-relative paths; the root of the lazygit gitsuite.nvim started is known (the
+  -- terminal's b:gitsuite_lazygit_root), so resolving one must not ask git (a blocking rev-parse).
+  describe("the root of the running lazygit", function()
+    local real_system = vim.system
+    local starts
+
+    before_each(function()
+      starts = {}
+      vim.system = function(cmd)
+        starts[#starts + 1] = cmd
+        return {
+          pid = 4242,
+          wait = function()
+            error("vim.system():wait() called: the editor would freeze")
+          end,
+          kill = function() end,
+          is_closing = function()
+            return false
+          end,
+        }
+      end
+    end)
+
+    after_each(function()
+      vim.system = real_system
+    end)
+
+    ---Focus a scratch buffer standing in for the lazygit terminal, rooted at `root`.
+    local function focus_lazygit(root)
+      vim.cmd("enew")
+      vim.bo.buftype = "nofile"
+      vim.b.gitsuite_lazygit_root = root
+    end
+
+    it("badd resolves below it without starting git", function()
+      vim.cmd("only")
+      focus_lazygit(vim.fn.getcwd())
+      assert.is_true(badd.run("README.md"))
+      assert.equals(0, #starts, "no git start: " .. vim.inspect(starts))
+      assert.is_true(vim.fn.bufnr(vim.fn.getcwd() .. "/README.md") > 0)
+    end)
+
+    it("replace resolves below it without starting git", function()
+      vim.cmd("only")
+      local dir = vim.fn.tempname() .. "-gitsuite-lazygit-root"
+      vim.fn.mkdir(dir, "p")
+      local scratch = dir .. "/scratch.md"
+      vim.fn.writefile({ "scratch" }, scratch)
+      editor_scope.open_file(scratch)
+      local win = vim.api.nvim_get_current_win()
+      vim.cmd("split")
+      focus_lazygit(vim.fn.getcwd())
+
+      assert.is_true(replace.run("README.md"))
+      assert.equals(0, #starts, "no git start: " .. vim.inspect(starts))
+      assert.equals(
+        vim.uv.fs_realpath(vim.fn.getcwd() .. "/README.md"),
+        vim.uv.fs_realpath(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)))
+      )
+      vim.fn.delete(dir, "rf")
+    end)
+
+    it("a path that is not below it is taken from the cwd, still without git", function()
+      vim.cmd("only")
+      focus_lazygit(vim.fn.tempname() .. "-not-a-repo")
+      assert.equals(vim.fn.fnamemodify("README.md", ":p"), badd.resolve("README.md"))
+      assert.equals(0, #starts)
+    end)
+  end)
 end)

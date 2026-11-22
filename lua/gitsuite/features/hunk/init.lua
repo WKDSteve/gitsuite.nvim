@@ -8,7 +8,6 @@
 --- ("what changed here") without gitsigns.
 
 local adapter = require("gitsuite.adapter")
-local git = require("lib.nvim.git")
 local notify = require("gitsuite.util.notify")
 
 local M = {}
@@ -31,24 +30,35 @@ local function unavailable(action)
 end
 
 ---@internal
----@param bufnr integer
----@return string|nil
-local function repo_root_of(bufnr)
-  local path = vim.api.nvim_buf_get_name(bufnr)
-  if path == "" then return nil end
-  return git.repo_root({ dir = vim.fs.dirname(path) })
-end
-
----@internal
 --- A gitsigns action callback (`fun(err?: string)`): fires
---- `GitsuiteStatusChanged` for `dir` once the write actually completed,
---- unless gitsigns reported an error.
----@param dir string|nil
+--- `GitsuiteStatusChanged` with the repo root of `bufnr` once the write
+--- actually completed, unless gitsigns reported an error.
+---
+--- The root is what gitsigns already knows about the buffer
+--- (`b:gitsigns_status_dict.root`, the same normalized `--show-toplevel`);
+--- only when it is missing is git asked, without waiting, after the write.
+---@param bufnr integer
 ---@return fun(err?: string)
-local function on_status_changed(dir)
+local function on_status_changed(bufnr)
+  local status = vim.b[bufnr].gitsigns_status_dict
+  local known = type(status) == "table"
+      and type(status.root) == "string"
+      and status.root ~= ""
+      and status.root
+    or nil
+  local path = vim.api.nvim_buf_get_name(bufnr)
   return function(err)
-    if err or not dir then return end
-    require("gitsuite.events").status_changed(dir)
+    if err then return end
+    if known then
+      require("gitsuite.events").status_changed(known)
+      return
+    end
+    if path == "" then return end
+    local gitq = require("gitsuite.util.gitq")
+    gitq.run({ "rev-parse", "--show-toplevel" }, { dir = vim.fs.dirname(path) }, function(res)
+      local root = gitq.line(res)
+      if root then require("gitsuite.events").status_changed(root) end
+    end)
   end
 end
 
@@ -58,8 +68,7 @@ function M.stage()
     unavailable("stage")
     return
   end
-  local dir = repo_root_of(vim.api.nvim_get_current_buf())
-  require("gitsuite.adapter.gitsigns").stage_hunk(on_status_changed(dir))
+  require("gitsuite.adapter.gitsigns").stage_hunk(on_status_changed(vim.api.nvim_get_current_buf()))
 end
 
 ---Reset the hunk at the cursor to its `HEAD`/index version.
@@ -94,8 +103,9 @@ function M.stage_buffer()
     unavailable("stage-buffer")
     return
   end
-  local dir = repo_root_of(vim.api.nvim_get_current_buf())
-  require("gitsuite.adapter.gitsigns").stage_buffer(on_status_changed(dir))
+  require("gitsuite.adapter.gitsigns").stage_buffer(
+    on_status_changed(vim.api.nvim_get_current_buf())
+  )
 end
 
 ---Reset every hunk in the buffer to `HEAD`/index. Does not fire
