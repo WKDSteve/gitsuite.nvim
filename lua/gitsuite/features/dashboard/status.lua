@@ -402,13 +402,14 @@ local function read_statuses(repos, progress_text, on_complete, stream)
   -- could redraw or take a key. The first one starts at once; the rest follow one per tick.
   local waiting = {} ---@type (fun())[]
   local tick_used = false
+  -- The next tick is planned before `start` runs, so a start that throws cannot strand the queue.
   local function next_tick()
     tick_used = false
     local start = table.remove(waiting, 1)
     if not start then return end
     tick_used = true
-    start()
     vim.schedule(next_tick)
+    start()
   end
   ---@param start fun()
   local function one_per_tick(start)
@@ -417,8 +418,8 @@ local function read_statuses(repos, progress_text, on_complete, stream)
       return
     end
     tick_used = true
-    start()
     vim.schedule(next_tick)
+    start()
   end
 
   -- A bounded worker pool (`lib.nvim.async.map_limit`): MAX_PARALLEL reads in
@@ -428,8 +429,11 @@ local function read_statuses(repos, progress_text, on_complete, stream)
   -- a read is side-effect free and bounded by GIT_TIMEOUT_MS, so the scan
   -- always runs to its end. Both callbacks run on the main loop.
   map_limit(repos, MAX_PARALLEL, function(repo, _, done)
+    -- A deferred start runs outside map_limit's own pcall: a throw must still settle the repository (as a
+    -- failure), or the scan would never answer.
     one_per_tick(function()
-      status_repo(repo, done)
+      local ok, err = pcall(status_repo, repo, done)
+      if not ok then done(nil, tostring(err)) end
     end)
   end, function(results, failures)
     ---@type RepoDashboardRecord[]
