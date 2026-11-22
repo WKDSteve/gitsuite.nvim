@@ -138,7 +138,8 @@ return {
       wait = [[vim.fn.getreg("+"):find("alpha", 1, true) and vim.fn.getreg("+"):find("bravo", 1, true)]],
       note = "the report of both repositories is in +",
     },
-    { expect = [[_G.said("to the clipboard")]], note = "and it says so" },
+    -- The copy does not wait for the clipboard tool: the message comes with its result, a tick later.
+    { wait = [[_G.said("to the clipboard")]], note = "and it says so once the copy is done" },
     { expect = [[_G.dwin() ~= nil]], note = "the popup stays open" },
 
     -- New buffer, and q back on the same row

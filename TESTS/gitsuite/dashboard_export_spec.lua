@@ -114,7 +114,15 @@ describe("gitsuite.features.dashboard.view: E exports a report", function()
     { package.loaded, "lib.nvim.cross.copy_to_clipboard" },
   })
 
-  local view, picks, messages, copied
+  local view, picks, messages, copied, copy_ok
+
+  ---The first message that contains `text`, or nil.
+  local function said(text)
+    for _, msg in ipairs(messages) do
+      if msg:find(text, 1, true) then return msg end
+    end
+    return nil
+  end
 
   local function bufnr()
     return vim.fn.bufnr("gitsuite://dashboard")
@@ -131,13 +139,22 @@ describe("gitsuite.features.dashboard.view: E exports a report", function()
   end
 
   before_each(function()
-    messages, copied = {}, nil
+    messages, copied, copy_ok = {}, nil, true
     require("gitsuite.util.notify").notify = function(msg)
       messages[#messages + 1] = msg
     end
-    package.loaded["lib.nvim.cross.copy_to_clipboard"] = function(text)
+    -- Never the real clipboard. The form without `on_done` waits for the clipboard tool (PowerShell on
+    -- Windows): calling it is an error here. The form with it answers on a later tick, as lib.nvim does.
+    package.loaded["lib.nvim.cross.copy_to_clipboard"] = function(text, on_done)
+      if type(on_done) ~= "function" then
+        error(
+          "copy_to_clipboard(text) without on_done: the editor would wait for the clipboard tool"
+        )
+      end
       copied = text
-      return true
+      vim.schedule(function()
+        on_done(copy_ok)
+      end)
     end
     -- Answers each `kit.select` with the item whose label starts with the next entry of `picks`.
     require("ui.kit").select = function(o)
@@ -166,6 +183,40 @@ describe("gitsuite.features.dashboard.view: E exports a report", function()
     assert.is_truthy(copied, "nothing was copied")
     assert.is_truthy(copied:find("beta", 1, true))
     assert.is_nil(copied:find("alpha", 1, true), "a clean repository is not behind")
+    assert.is_nil(said("to the clipboard"), "the message waits for the result of the copy")
+    assert(
+      vim.wait(2000, function()
+        return said("Copied Behind (1) to the clipboard") ~= nil
+      end),
+      "no message once the copy was done: " .. vim.inspect(messages)
+    )
+  end)
+
+  it("says so when the copy failed", function()
+    copy_ok = false
+    picks = { "Behind", "Clipboard" }
+    press("E")
+    assert(
+      vim.wait(2000, function()
+        return said("Failed to copy to the clipboard") ~= nil
+      end),
+      "no failure message: " .. vim.inspect(messages)
+    )
+    assert.is_nil(said("Copied"))
+  end)
+
+  it("output = clipboard copies the table without waiting and says so afterwards", function()
+    view.show({ rec({ name = "gamma" }) }, { output = "clipboard" })
+    assert.is_truthy(
+      copied and copied:find("gamma", 1, true),
+      "the table was handed to the clipboard"
+    )
+    assert(
+      vim.wait(2000, function()
+        return said("Dashboard copied to clipboard") ~= nil
+      end),
+      "no message once the copy was done: " .. vim.inspect(messages)
+    )
   end)
 
   it("opens the report in a new scratch buffer", function()

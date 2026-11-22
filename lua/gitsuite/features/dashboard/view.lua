@@ -1491,11 +1491,15 @@ local function _export(ctx)
           local lines = export.build(rep.id, ctx.records)
           if not lines then return end
           if target.id == "clipboard" then
-            if copy_to_clipboard(table.concat(lines, "\n")) then
-              notify(("Copied %s to the clipboard"):format(rep.label), 2)
-            else
-              notify("Failed to copy to the clipboard", 4)
-            end
+            -- The form with a callback never waits for the clipboard tool (the Windows fallback,
+            -- PowerShell's Set-Clipboard, froze the editor 300-700 ms); the message comes with the result.
+            copy_to_clipboard(table.concat(lines, "\n"), function(ok)
+              if ok then
+                notify(("Copied %s to the clipboard"):format(rep.label), 2)
+              else
+                notify("Failed to copy to the clipboard", 4)
+              end
+            end)
           elseif target.id == "buffer" then
             _export_to_buffer(lines, rep.id, ctx.before_open)
           else
@@ -2491,16 +2495,18 @@ end
 
 ---@private
 ---@internal
----Copies the raw dashboard table to the system clipboard.
+---Copies the raw dashboard table to the system clipboard without waiting for the clipboard tool: the
+---message comes once the copy is done, on a later tick.
 ---@param lines string[]
 ---@return nil
 local function show_clipboard(lines)
-  local ok = copy_to_clipboard(table.concat(lines, "\n"))
-  if ok then
-    notify("Dashboard copied to clipboard", 2)
-  else
-    notify("Failed to copy dashboard to clipboard", 4)
-  end
+  copy_to_clipboard(table.concat(lines, "\n"), function(ok)
+    if ok then
+      notify("Dashboard copied to clipboard", 2)
+    else
+      notify("Failed to copy dashboard to clipboard", 4)
+    end
+  end)
 end
 
 ---@private
