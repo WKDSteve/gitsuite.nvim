@@ -23,7 +23,8 @@
 ---
 --- Reading is side-effect free, so each repository is queried through
 --- `lib.nvim.git.run_async` (read-only, 60 s timeout) and the repositories are
---- fanned out through `lib.nvim.async.map_limit` (at most 8 at a time); the
+--- fanned out through `lib.nvim.async.map_limit` (at most 8 at a time, and at
+--- most one repository's git starts per event-loop tick); the
 --- aggregated records are handed back once all queries finish, preserving
 --- discovery order.
 ---
@@ -395,6 +396,31 @@ local function read_statuses(repos, progress_text, on_complete, stream)
   local total = #repos
   local handle = progress.create(progress_text, total)
 
+  -- At most one repository's reads (its two git starts) per event-loop tick. libuv starts a process
+  -- synchronously on the editor thread (CreateProcess on Windows, ~7 ms idle and far more under load), so
+  -- starting MAX_PARALLEL repositories at once froze the editor for all of their starts before the dashboard
+  -- could redraw or take a key. The first one starts at once; the rest follow one per tick.
+  local waiting = {} ---@type (fun())[]
+  local tick_used = false
+  local function next_tick()
+    tick_used = false
+    local start = table.remove(waiting, 1)
+    if not start then return end
+    tick_used = true
+    start()
+    vim.schedule(next_tick)
+  end
+  ---@param start fun()
+  local function one_per_tick(start)
+    if tick_used then
+      waiting[#waiting + 1] = start
+      return
+    end
+    tick_used = true
+    start()
+    vim.schedule(next_tick)
+  end
+
   -- A bounded worker pool (`lib.nvim.async.map_limit`): MAX_PARALLEL reads in
   -- flight, the next repository starts whenever one finishes, and the results
   -- come back indexed by discovery order, so the dashboard stays stable despite
@@ -402,7 +428,9 @@ local function read_statuses(repos, progress_text, on_complete, stream)
   -- a read is side-effect free and bounded by GIT_TIMEOUT_MS, so the scan
   -- always runs to its end. Both callbacks run on the main loop.
   map_limit(repos, MAX_PARALLEL, function(repo, _, done)
-    status_repo(repo, done)
+    one_per_tick(function()
+      status_repo(repo, done)
+    end)
   end, function(results, failures)
     ---@type RepoDashboardRecord[]
     local records = {}
