@@ -19,6 +19,18 @@ local NAME_MAX, BRANCH_MAX = 30, 18
 ---@field index integer Record index
 ---@field reason string Why the repository is left out, e.g. "diverged"
 
+---How many rows each block may show. The dialog cuts a question that is taller than the
+---editor from the bottom, which would drop the "not synced" block first, so the rows are
+---budgeted against the editor's height: a question line, headers, totals, buttons and
+---borders take about 14 lines, and a second block needs its share.
+---@param has_skipped boolean
+---@return integer
+function M.row_budget(has_skipped)
+  local free = vim.o.lines - 14
+  if has_skipped then free = math.floor(free / 2) end
+  return math.max(3, math.min(M.MAX_ROWS, free))
+end
+
 ---@private
 ---@internal
 ---`s` cut to `max` display cells with an ellipsis, then right-padded to `width`.
@@ -58,13 +70,17 @@ end
 ---@return string[]
 function M.lines(records, targets, skipped, max_rows)
   skipped = skipped or {}
-  max_rows = max_rows or M.MAX_ROWS
+  max_rows = max_rows or M.row_budget(#skipped > 0)
+  -- The dialog wraps a line wider than itself, which would wreck the columns: on a
+  -- narrow window the name and branch columns give way first.
+  local name_max = math.max(10, math.min(NAME_MAX, vim.o.columns - 60))
+  local branch_max = math.max(6, math.min(BRANCH_MAX, vim.o.columns - 72))
 
   local function row(i, last)
     local r = records[i]
     return {
-      clip(r.name or "?", NAME_MAX),
-      clip(r.branch or "", BRANCH_MAX),
+      clip(r.name or "?", name_max),
+      clip(r.branch or "", branch_max),
       count(r.behind),
       count(r.ahead),
       last or "",

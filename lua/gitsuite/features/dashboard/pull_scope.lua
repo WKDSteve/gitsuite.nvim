@@ -45,14 +45,18 @@ end
 ---and all of them.
 ---@param records RepoDashboardRecord[]
 ---@param fetch_time? fun(path: string): integer|nil Last fetch of a repository; defaults to `FETCH_HEAD`'s mtime
----@return integer[] behind, integer[] unknown, integer[] all
+---@return integer[] behind, integer[] unknown, integer[] all, integer[] diverged
 function M.classify(records, fetch_time)
   fetch_time = fetch_time or gitfs.fetch_time
-  local behind, unknown, all = {}, {}, {}
+  local behind, unknown, all, diverged = {}, {}, {}, {}
   for i, r in ipairs(records) do
     all[#all + 1] = i
     if not r.has_upstream then
       unknown[#unknown + 1] = i
+    elseif (r.behind or 0) > 0 and (r.ahead or 0) > 0 then
+      -- The pull is fast-forward only: a repository with commits of its own on top
+      -- of what it is behind on cannot take it, so it is not offered as a target.
+      diverged[#diverged + 1] = i
     elseif (r.behind or 0) > 0 then
       -- A positive count is proof on its own (the tracking ref is past HEAD),
       -- whatever wrote it: a clone, a fetch from another worktree, a `.git`
@@ -62,7 +66,7 @@ function M.classify(records, fetch_time)
       unknown[#unknown + 1] = i
     end
   end
-  return behind, unknown, all
+  return behind, unknown, all, diverged
 end
 
 ---Builds `gP`'s prompt.
@@ -71,7 +75,7 @@ end
 ---@param fetch_time? fun(path: string): integer|nil See `classify`
 ---@return DashboardPullPlan
 function M.plan(records, scope, fetch_time)
-  local behind, unknown, all = M.classify(records, fetch_time)
+  local behind, unknown, all, diverged = M.classify(records, fetch_time)
 
   local behind_label = ("Only behind (%d)"):format(#behind)
   local all_label = ("All (%d)"):format(#all)
@@ -84,9 +88,12 @@ function M.plan(records, scope, fetch_time)
       #all == 1 and "y" or "ies"
     ),
   }
-  if #behind > 0 or #unknown > 0 then
+  if #behind > 0 or #unknown > 0 or #diverged > 0 then
     local confirm_table = require("gitsuite.features.dashboard.confirm_table")
     local skipped = {}
+    for _, i in ipairs(diverged) do
+      skipped[#skipped + 1] = { index = i, reason = "diverged" }
+    end
     for _, i in ipairs(unknown) do
       skipped[#skipped + 1] = {
         index = i,
@@ -95,7 +102,7 @@ function M.plan(records, scope, fetch_time)
     end
     lines[#lines + 1] = ""
     vim.list_extend(lines, confirm_table.lines(records, behind, skipped))
-    if #unknown > 0 then lines[#lines + 1] = "NOT SYNCED rows are skipped by 'Only behind'." end
+    if #skipped > 0 then lines[#lines + 1] = "NOT SYNCED rows are skipped by 'Only behind'." end
   end
 
   return {

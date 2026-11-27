@@ -435,6 +435,51 @@ describe("gitsuite.features.dashboard", function()
     end)
   end)
 
+  describe("confirm_table: the bulk confirmation's table", function()
+    local confirm_table = require("gitsuite.features.dashboard.confirm_table")
+    local saved_lines, saved_columns
+
+    before_each(function()
+      saved_lines, saved_columns = vim.o.lines, vim.o.columns
+    end)
+    after_each(function()
+      vim.o.lines, vim.o.columns = saved_lines, saved_columns
+    end)
+
+    local function many(n, prefix)
+      local records, idx = {}, {}
+      for i = 1, n do
+        records[i] =
+          { name = prefix .. i, branch = "main", behind = 1, ahead = 0, has_upstream = true }
+        idx[i] = i
+      end
+      return records, idx
+    end
+
+    it("keeps the not-synced block inside a small editor instead of cutting it", function()
+      vim.o.lines = 30
+      local records, idx = many(40, "r")
+      local skipped = {}
+      for i = 1, 30 do
+        skipped[i] = { index = i, reason = "diverged" }
+      end
+      local lines = confirm_table.lines(records, idx, skipped)
+      -- The dialog has about lines - 4 rows, minus buttons, a blank and the question.
+      assert.is_true(#lines <= vim.o.lines - 8, #lines)
+      assert.truthy(table.concat(lines, "\n"):find("NOT SYNCED", 1, true))
+      assert.truthy(table.concat(lines, "\n"):find("more", 1, true))
+    end)
+
+    it("clips a long name so the table stays inside a narrow editor", function()
+      vim.o.columns = 60
+      local records = { { name = string.rep("n", 60), branch = string.rep("b", 40), behind = 1 } }
+      local lines = confirm_table.lines(records, { 1 })
+      for _, l in ipairs(lines) do
+        assert.is_true(vim.fn.strdisplaywidth(l) <= vim.o.columns - 8, l)
+      end
+    end)
+  end)
+
   describe("pull_scope: what gP offers to pull", function()
     local pull_scope
 
@@ -491,6 +536,18 @@ describe("gitsuite.features.dashboard", function()
       assert.truthy(plan.question:match("TOTAL%s+4"), plan.question)
     end)
 
+    it("plan: a diverged repository is not offered, the fast-forward would fail", function()
+      local d = rec("diverged", 2, true)
+      d.ahead = 1
+      local behind, _, all, diverged = pull_scope.classify({ rec("b", 1, true), d }, fetch_time)
+      assert.same({ 1 }, behind)
+      assert.same({ 2 }, diverged)
+      assert.same({ 1, 2 }, all)
+      local plan = pull_scope.plan({ rec("b", 1, true), d }, nil, fetch_time)
+      assert.same({ "Only behind (1)", "All (2)" }, plan.choices)
+      assert.truthy(plan.question:match("diverged%s+2%s+1%s+diverged"), plan.question)
+    end)
+
     it("plan: scope 'all' puts 'All' first", function()
       local plan = pull_scope.plan(records, "all", fetch_time)
       assert.same({ "All (5)", "Only behind (2)" }, plan.choices)
@@ -507,7 +564,7 @@ describe("gitsuite.features.dashboard", function()
         many[i] = rec("r" .. i, 0, false)
       end
       local plan = pull_scope.plan(many, "behind", fetch_time)
-      assert.is_not_nil(plan.question:find("+3 more", 1, true))
+      assert.truthy(plan.question:match("%+%d+ more"), plan.question)
     end)
 
     it("classify: the default fetch lookup reads FETCH_HEAD of a real clone", function()
