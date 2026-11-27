@@ -94,4 +94,43 @@ describe("gitsuite.features.status", function()
       end
     end)
   end)
+
+  -- `status --porcelain` names files relative to the repository root, wherever it runs: from a
+  -- subfolder the entries used to be joined to the cwd and pointed at files that do not exist.
+  describe("run from a subfolder", function()
+    local original_cwd, repo
+
+    before_each(function()
+      original_cwd = vim.fn.getcwd()
+      repo = vim.fn.tempname() .. "-gitsuite-status-subdir"
+      vim.fn.mkdir(repo .. "/sub", "p")
+      local init = vim.system({ "git", "-C", repo, "init", "-q" }):wait()
+      assert.equals(0, init.code, "fixture: git init failed: " .. tostring(init.stderr))
+      vim.fn.writefile({ "x" }, repo .. "/top.txt")
+      vim.fn.writefile({ "x" }, repo .. "/sub/s.txt")
+      vim.api.nvim_set_current_dir(repo .. "/sub")
+    end)
+
+    after_each(function()
+      vim.api.nvim_set_current_dir(original_cwd)
+      vim.cmd("cclose")
+      pcall(vim.fn.delete, repo, "rf")
+    end)
+
+    it("quickfix() points every entry at an existing file", function()
+      status.quickfix()
+      assert(vim.wait(10000, require("gitsuite.util.gitq").idle), "git did not answer")
+      local items = vim.fn.getqflist({ items = 0 }).items
+
+      assert.equals(2, #items)
+      for _, item in ipairs(items) do
+        local name = vim.fn.bufname(item.bufnr)
+        assert.equals(
+          1,
+          vim.fn.filereadable(name),
+          ("quickfix entry %q is not a real file"):format(name)
+        )
+      end
+    end)
+  end)
 end)

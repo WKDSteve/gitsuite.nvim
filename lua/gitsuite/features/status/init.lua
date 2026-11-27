@@ -70,25 +70,26 @@ end
 ---@return nil
 function M.quickfix()
   local valid = gitq.ticket("status.quickfix")
-  -- The paths are joined to the directory the command ran in, not the one current when git answers.
-  local cwd = vim.fn.getcwd()
-  gitq.run(
-    { "status", "--porcelain", "-z", "-u" },
-    { read_only = true, binary = true },
-    function(res)
-      if not valid() then return end
-      local status = res.code == 0 and git.parse_status(res.stdout) or nil
-      if res.code == -1 or res.timed_out then
-        notify.error("status: " .. gitq.failure(res, ""))
-        return
-      end
-      M.show_quickfix(status, cwd)
+  -- `status --porcelain` names files relative to the repository root, whatever directory it ran in, so the
+  -- root comes with it (two calls started together, as the gates do) and the paths are joined to that.
+  gitq.all({
+    { args = { "rev-parse", "--show-toplevel" } },
+    { args = { "status", "--porcelain", "-z", "-u" }, opts = { read_only = true, binary = true } },
+  }, function(res)
+    if not valid() then return end
+    local root = gitq.line(res[1])
+    local st = res[2]
+    if st.code == -1 or st.timed_out then
+      notify.error("status: " .. gitq.failure(st, ""))
+      return
     end
-  )
+    local status = root and st.code == 0 and git.parse_status(st.stdout) or nil
+    M.show_quickfix(status, root or vim.fn.getcwd())
+  end)
 end
 
 ---@param status Lib.Git.StatusMap|nil
----@param cwd string
+---@param cwd string  the repository root the paths in `status` are relative to
 function M.show_quickfix(status, cwd)
   if not status or vim.tbl_isempty(status) then
     notify.info("status: nothing to report (clean working tree, or not a git repo)")
