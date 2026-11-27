@@ -119,6 +119,53 @@ describe("gitsuite.integrations.menu", function()
     assert.is_not_nil(git.repo_root())
   end)
 
+  describe("Browse group (open.nvim)", function()
+    local saved_loaded, saved_preload
+
+    before_each(function()
+      saved_loaded = package.loaded["open.registry"]
+      saved_preload = package.preload["open.registry"]
+    end)
+
+    after_each(function()
+      package.loaded["open.registry"] = saved_loaded
+      package.preload["open.registry"] = saved_preload
+    end)
+
+    it("is left out without open.nvim", function()
+      package.loaded["open.registry"] = nil
+      package.preload["open.registry"] = function()
+        error("open.nvim is not installed")
+      end
+      local items = menu.items()
+      assert.is_nil(find(items, "Open File on Web"))
+      assert.is_nil(find(items, "Open Repository on Web"))
+      assert.is_nil(find(items, "Browse"))
+    end)
+
+    it("with open.nvim: both entries route to :Git browse", function()
+      package.loaded["open.registry"] = { dispatch = function() end }
+      local items = menu.items()
+      local file, repo = find(items, "Open File on Web"), find(items, "Open Repository on Web")
+      assert.is_not_nil(file)
+      assert.is_not_nil(repo)
+
+      local calls = {}
+      local original_cmd = vim.cmd
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.cmd = setmetatable({}, {
+        __call = function(_, c)
+          calls[#calls + 1] = c
+        end,
+      })
+      file.cmd()
+      repo.cmd()
+      vim.cmd = original_cmd
+
+      assert.same({ "Git browse file", "Git browse repo" }, calls)
+    end)
+  end)
+
   it("submenu() wraps items() as one 'Git' fly-out entry", function()
     local sub = menu.submenu()
     assert.is_not_nil(sub)

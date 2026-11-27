@@ -48,6 +48,14 @@ local function has_gitsigns()
 end
 
 ---@internal
+--- Whether open.nvim is installed: `:Git browse` hands the web URL to its
+--- dispatcher (`open.registry`) and only errors without it.
+---@return boolean
+local function has_open()
+  return (pcall(require, "open.registry"))
+end
+
+---@internal
 --- A menu callback that dispatches one `:Git <args>` route, resolved at call
 --- time so a `commands.git` rename (or a `setup()` that has not run yet when
 --- this module loads) is always honoured.
@@ -153,6 +161,28 @@ function M.items()
       route("hunk toggle-deleted"),
       "td",
       { icon = icon("F205", "t") }
+    )
+  )
+
+  -- `:Git browse` through open.nvim (an optional dependency of the browse
+  -- feature only): without open.nvim the whole group is left out.
+  local browse = has_open()
+  contextmenu.group(
+    out,
+    contextmenu.heading("Browse"),
+    contextmenu.entry(
+      browse,
+      "Open File on Web",
+      route("browse file"),
+      nil,
+      { icon = icon("F0AC", "w") }
+    ),
+    contextmenu.entry(
+      browse,
+      "Open Repository on Web",
+      route("browse repo"),
+      nil,
+      { icon = icon("F09B", "r") }
     )
   )
 
