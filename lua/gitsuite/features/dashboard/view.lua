@@ -848,6 +848,46 @@ end
 
 ---@private
 ---@internal
+---filetree.nvim's active adapter, or nil when filetree.nvim is not installed
+---or has not run `setup()` -- a soft dependency, resolved the same way
+---gopath.nvim does (`gopath.util.filetree`).
+---@return table|nil
+local function _filetree_adapter()
+  local ok, filetree = pcall(require, "filetree")
+  if not ok or type(filetree) ~= "table" then return nil end
+  if type(filetree.is_initialized) == "function" and not filetree.is_initialized() then
+    return nil
+  end
+  local ok_adapter, adapter = pcall(filetree.adapter)
+  if not ok_adapter or type(adapter) ~= "table" or type(adapter.open_reveal) ~= "function" then
+    return nil
+  end
+  return adapter
+end
+
+---@private
+---@internal
+---Reveals `record`'s repository root in filetree.nvim (`T`). Without
+---filetree.nvim it says so instead of failing; an erroring adapter is
+---reported, never a raw traceback (same convention as gopath.nvim).
+---@param record RepoDashboardRecord
+---@param before_open? fun(): nil Called right before the tree opens (e.g. to close a popup)
+---@return nil
+local function _reveal_in_filetree(record, before_open)
+  local adapter = _filetree_adapter()
+  if not adapter then
+    notify("filetree.nvim is not available", 3)
+    return
+  end
+  if before_open then before_open() end
+  local ok, err = pcall(adapter.open_reveal, record.path)
+  if not ok then
+    notify("filetree.nvim could not reveal " .. record.path .. ": " .. tostring(err), 4)
+  end
+end
+
+---@private
+---@internal
 ---Replaces `bufnr`'s content with `lines` and applies `highlights`, toggling
 ---`modifiable` only for the duration of the write so read-only dashboard buffers
 ---stay locked afterwards.
@@ -2027,6 +2067,14 @@ local ROW_KEYMAPS = {
     end,
   },
   {
+    keys = { "T" },
+    desc = "Show the repository under cursor in filetree.nvim (when installed)",
+    run = function(ctx)
+      local record = _record_at_cursor(ctx.records)
+      if record then _reveal_in_filetree(record, ctx.before_open) end
+    end,
+  },
+  {
     keys = { "?" },
     label = "? Keys",
     desc = "Show every key available in the dashboard",
@@ -2221,6 +2269,8 @@ local function _context_menu_items(ctx)
         out,
         contextmenu.heading(record.name),
         contextmenu.entry(true, "Open", call("<CR>"), "<CR>"),
+        -- Soft dependency: left out entirely without filetree.nvim.
+        contextmenu.entry(_filetree_adapter() ~= nil, "Show in Filetree", call("T"), "T"),
         contextmenu.entry(true, "Push", call("p"), busy or "p", busy_opts),
         contextmenu.entry(true, "Pull", call("P"), busy or "P", busy_opts),
         contextmenu.entry(true, "Fetch", call("f"), busy or "f", busy_opts),

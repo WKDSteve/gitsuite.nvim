@@ -119,6 +119,7 @@ former `:Reposcope dashboard`.
 | `x` | n | Remove the repository under the cursor from the current page — never touches disk |
 | `E` | n | Export a report of the page: pick what (all with status, not clean, dirty, behind with the count, ahead, diverged; each with its repository count), then where (clipboard, new buffer, file) |
 | `y` | n | Yank the repository's path |
+| `T` | n | Show the repository in [filetree.nvim](https://github.com/WKDSteve/filetree.nvim) (optional; without it `T` says so and the context menu leaves the entry out) |
 | `?` | n | List every one of these keys |
 | `<RightMouse>` | n, x | Context menu of the same actions as the table above — the marked repositories (or the Visual selection) when any, otherwise the row under the **mouse pointer**. Disable with `dashboard.context_menu = false` (see [configuration.md](configuration.md#dashboard)) |
 

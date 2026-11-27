@@ -1589,4 +1589,74 @@ describe("gitsuite.features.dashboard.view: context menu", function()
     local later = captured_get_items()
     assert.equals("2 marked repositories", later[1].name)
   end)
+
+  -- GS: gitsuite.nvim/dashboard-menue-repository-im-filetree-zeigen --
+  -- "Show in Filetree" (key T) reveals the row's repository in filetree.nvim,
+  -- a soft dependency: without it the menu leaves the entry out.
+  describe("Show in Filetree (filetree.nvim)", function()
+    local saved_loaded, saved_preload
+
+    before_each(function()
+      saved_loaded = package.loaded["filetree"]
+      saved_preload = package.preload["filetree"]
+      vim.fn.getmousepos = function()
+        return { winid = vim.api.nvim_get_current_win(), line = 3, column = 1 }
+      end
+      vim.fn.mode = function()
+        return "n"
+      end
+    end)
+
+    after_each(function()
+      package.loaded["filetree"] = saved_loaded
+      package.preload["filetree"] = saved_preload
+    end)
+
+    ---Installs a fake filetree.nvim whose adapter records every reveal.
+    ---@param initialized boolean
+    ---@return string[] revealed
+    local function fake_filetree(initialized)
+      local revealed = {}
+      package.loaded["filetree"] = {
+        is_initialized = function()
+          return initialized
+        end,
+        adapter = function()
+          return {
+            open_reveal = function(path)
+              revealed[#revealed + 1] = path
+              return true
+            end,
+          }
+        end,
+      }
+      return revealed
+    end
+
+    it("is left out without filetree.nvim", function()
+      package.loaded["filetree"] = nil
+      package.preload["filetree"] = function()
+        error("filetree.nvim is not installed")
+      end
+      view.show({ rec("r1"), rec("r2") }, { output = "buffer" })
+      assert.is_nil(find_item(captured_get_items(), "Show in Filetree"))
+    end)
+
+    it("is left out while filetree.nvim has not run setup()", function()
+      fake_filetree(false)
+      view.show({ rec("r1"), rec("r2") }, { output = "buffer" })
+      assert.is_nil(find_item(captured_get_items(), "Show in Filetree"))
+    end)
+
+    it("with filetree.nvim: reveals the clicked repository's path", function()
+      local revealed = fake_filetree(true)
+      view.show({ rec("r1"), rec("r2") }, { output = "buffer" })
+      local item = find_item(captured_get_items(), "Show in Filetree")
+      assert.is_not_nil(item)
+      ---@cast item -nil
+      assert.equals("T", item.rtxt)
+      item.cmd()
+      assert.same({ "/fake/r2" }, revealed)
+    end)
+  end)
 end)
