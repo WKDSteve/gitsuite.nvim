@@ -1293,6 +1293,13 @@ local function _confirm_bulk(bufnr, records, verb, action_fn, indices, what)
         "\n"
       )
   end
+  if verb == "sync" or verb == "update" then
+    -- Both fetch first, so the direction is not known yet; what the last fetch showed
+    -- still says how much is pending and what will be left alone.
+    local summary =
+      require("gitsuite.features.dashboard.confirm_table").summary(records, indices, verb)
+    if summary then question = question .. "\n" .. summary end
+  end
   kit.confirm({
     question = question,
     on_answer = function(yes)

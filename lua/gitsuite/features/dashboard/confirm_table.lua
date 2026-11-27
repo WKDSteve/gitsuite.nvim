@@ -167,6 +167,39 @@ function M.lines(records, targets, skipped, max_rows)
   return out
 end
 
+---One line on what `gS` / `gu` are going to meet. Those fetch first and decide the
+---direction afterwards, so there is no table to show, but the counts as the last fetch
+---left them tell how much is pending and what will be left alone. `nil` when nothing is
+---known to be pending (a never-fetched dashboard).
+---@param records RepoDashboardRecord[]
+---@param indices integer[]
+---@param verb "sync"|"update"
+---@return string|nil
+function M.summary(records, indices, verb)
+  local behind, ahead, diverged = 0, 0, 0
+  for _, i in ipairs(indices) do
+    local r = records[i]
+    if r.has_upstream then
+      local a, b = r.ahead or 0, r.behind or 0
+      if a > 0 and b > 0 then
+        diverged = diverged + 1
+      elseif b > 0 then
+        behind = behind + 1
+      elseif a > 0 then
+        ahead = ahead + 1
+      end
+    end
+  end
+  local parts = {}
+  if behind > 0 then parts[#parts + 1] = ("%d to pull"):format(behind) end
+  if verb == "sync" and ahead > 0 then parts[#parts + 1] = ("%d to push"):format(ahead) end
+  if diverged > 0 then
+    parts[#parts + 1] = ("%d diverged, left alone (gs lists them)"):format(diverged)
+  end
+  if #parts == 0 then return nil end
+  return "As of the last fetch: " .. table.concat(parts, ", ")
+end
+
 ---The reason a repository cannot be pulled or pushed by a batch, or nil if it can.
 ---@param r RepoDashboardRecord
 ---@return string|nil

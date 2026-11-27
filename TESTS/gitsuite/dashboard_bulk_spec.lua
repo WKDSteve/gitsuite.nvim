@@ -615,6 +615,44 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
     assert.is_nil(state.bulk_verb())
   end)
 
+  it("gS and gu add what the last fetch showed: pending counts and the diverged", function()
+    actions.sync, actions.update = fake("sync"), fake("update")
+    local question
+    require("ui.kit").confirm = function(o)
+      question = o.question
+      o.on_answer(false)
+    end
+    local level, behind, ahead, diverged = record("r1"), record("r2"), record("r3"), record("r4")
+    behind.behind = 2
+    ahead.ahead = 1
+    diverged.ahead, diverged.behind = 1, 1
+    view.show({ level, behind, ahead, diverged }, { output = "buffer" })
+
+    press("gS")
+    assert.truthy(question:find("Sync 4 repositories", 1, true), question)
+    assert.truthy(
+      question:find("As of the last fetch: 1 to pull, 1 to push, 1 diverged", 1, true),
+      question
+    )
+    press("gu")
+    assert.truthy(question:find("Update 4 repositories", 1, true), question)
+    assert.truthy(question:find("As of the last fetch: 1 to pull, 1 diverged", 1, true), question)
+    assert.is_nil(question:find("to push", 1, true), "update never pushes")
+  end)
+
+  it("gS adds no summary line when nothing is known to be pending", function()
+    actions.sync = fake("sync")
+    local question
+    require("ui.kit").confirm = function(o)
+      question = o.question
+      o.on_answer(false)
+    end
+    view.show({ record("r1"), record("r2") }, { output = "buffer" })
+
+    press("gS")
+    assert.equals("Sync 2 repositories in this dashboard?", question)
+  end)
+
   it("gs syncs only the repositories the status shows ahead or behind", function()
     require("gitsuite.config").setup({ dashboard = { fetch_jobs = 4 } })
     actions.sync = fake("sync")
