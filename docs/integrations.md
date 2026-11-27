@@ -24,6 +24,14 @@ entries with no native fallback at all (stage/reset a hunk, toggle
 deleted lines: gitsigns' own hunk engine, never reimplemented) gate on
 gitsigns being loaded. Blame and diff stay offered either way.
 
+Two groups appear only when they can act: **Conflict** (Keep Ours, Keep
+Theirs, Keep Both, Keep None, Next Conflict through `:Git conflict ...`)
+while the buffer has merge-conflict markers, and **Browse** (open the
+file or repository on its web host through `:Git browse`) when
+[open.nvim](https://github.com/WKDSteve/open.nvim) is installed.
+`items(bufnr?)` reads the markers of `bufnr`, the current buffer by
+default.
+
 ## `pickers_nvim.lua` — branch-switch picker bridge
 
 The one module that knows [pickers.nvim](https://github.com/WKDSteve/pickers.nvim)
