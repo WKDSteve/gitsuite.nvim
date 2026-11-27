@@ -166,6 +166,88 @@ describe("gitsuite.integrations.menu", function()
     end)
   end)
 
+  describe("Conflict group", function()
+    local CONFLICT_NAMES = { "Keep Ours", "Keep Theirs", "Keep Both", "Keep None", "Next Conflict" }
+
+    ---@param lines string[]
+    ---@return integer
+    local function scratch(lines)
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      return buf
+    end
+
+    local CONFLICTED = {
+      "a",
+      "<<<<<<< HEAD",
+      "ours",
+      "=======",
+      "theirs",
+      ">>>>>>> feature",
+      "b",
+    }
+
+    it("is left out for a buffer without conflict markers", function()
+      local buf = scratch({ "plain", "text" })
+      local items = menu.items(buf)
+      assert.is_nil(find(items, "Conflict"))
+      for _, name in ipairs(CONFLICT_NAMES) do
+        assert.is_nil(find(items, name), name)
+      end
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("with conflict markers: every entry routes to :Git conflict", function()
+      local buf = scratch(CONFLICTED)
+      local items = menu.items(buf)
+      assert.is_not_nil(find(items, "Conflict"))
+
+      local calls = {}
+      local original_cmd = vim.cmd
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.cmd = setmetatable({}, {
+        __call = function(_, c)
+          calls[#calls + 1] = c
+        end,
+      })
+      for _, name in ipairs(CONFLICT_NAMES) do
+        local item = find(items, name)
+        assert.is_not_nil(item, name)
+        ---@cast item -nil
+        item.cmd()
+      end
+      vim.cmd = original_cmd
+
+      assert.same({
+        "Git conflict ours",
+        "Git conflict theirs",
+        "Git conflict both",
+        "Git conflict none",
+        "Git conflict next",
+      }, calls)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("defaults to the current buffer", function()
+      local buf = scratch(CONFLICTED)
+      local prev = vim.api.nvim_get_current_buf()
+      vim.api.nvim_set_current_buf(buf)
+      local items = menu.items()
+      vim.api.nvim_set_current_buf(prev)
+      assert.is_not_nil(find(items, "Keep Ours"))
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("shows key hints only where the conflict keymaps are bound", function()
+      local buf = scratch(CONFLICTED)
+      assert.is_nil(find(menu.items(buf), "Keep Ours").rtxt)
+      vim.b[buf].gitsuite_conflict_mappings_set = true
+      assert.equals("co", find(menu.items(buf), "Keep Ours").rtxt)
+      assert.equals("]x", find(menu.items(buf), "Next Conflict").rtxt)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
   it("submenu() wraps items() as one 'Git' fly-out entry", function()
     local sub = menu.submenu()
     assert.is_not_nil(sub)

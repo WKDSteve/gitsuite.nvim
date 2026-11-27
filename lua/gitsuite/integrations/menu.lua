@@ -69,8 +69,10 @@ end
 
 ---The git actions, as a flat item list a host composes into its own menu.
 ---Never empty: Blame and Diff always contribute at least one entry.
+---@param bufnr? integer  Buffer the menu acts on (default: the current one);
+---  only the Conflict group depends on it.
 ---@return Lib.ContextMenu.Item[]
-function M.items()
+function M.items(bufnr)
   local out = {}
   local gitsigns = has_gitsigns()
 
@@ -183,6 +185,60 @@ function M.items()
       route("browse repo"),
       nil,
       { icon = icon("F09B", "r") }
+    )
+  )
+
+  -- Merge-conflict resolution (`:Git conflict ...`), only while the buffer
+  -- actually has conflict markers: an always-present group would be noise
+  -- in every clean file. The key hints are the buffer-local maps the
+  -- conflict scan binds (`bindings/autocmds.lua`), shown only where they
+  -- are really set.
+  local buf = bufnr or vim.api.nvim_get_current_buf()
+  local conflicted = vim.api.nvim_buf_is_valid(buf)
+    and require("gitsuite.features.conflict").has_conflicts(buf)
+  local keys = conflicted and vim.b[buf].gitsuite_conflict_mappings_set == true
+  ---@param key string
+  ---@return string|nil
+  local function hint(key)
+    return keys and key or nil
+  end
+  contextmenu.group(
+    out,
+    contextmenu.heading("Conflict"),
+    contextmenu.entry(
+      conflicted,
+      "Keep Ours",
+      route("conflict ours"),
+      hint("co"),
+      { icon = icon("F060", "<") }
+    ),
+    contextmenu.entry(
+      conflicted,
+      "Keep Theirs",
+      route("conflict theirs"),
+      hint("ct"),
+      { icon = icon("F061", ">") }
+    ),
+    contextmenu.entry(
+      conflicted,
+      "Keep Both",
+      route("conflict both"),
+      hint("cb"),
+      { icon = icon("F0EC", "=") }
+    ),
+    contextmenu.entry(
+      conflicted,
+      "Keep None",
+      route("conflict none"),
+      hint("c0"),
+      { icon = icon("F05E", "0") }
+    ),
+    contextmenu.entry(
+      conflicted,
+      "Next Conflict",
+      route("conflict next"),
+      hint("]x"),
+      { icon = icon("F063", "v") }
     )
   )
 
