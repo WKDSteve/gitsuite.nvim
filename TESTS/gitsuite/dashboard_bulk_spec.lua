@@ -631,7 +631,7 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
 
     press("gs")
     assert.truthy(question:find("Sync 2 repositories with something to sync", 1, true), question)
-    assert.truthy(question:find("Diverged, left alone", 1, true), question)
+    assert.truthy(question:match("r4%s+main%s+1%s+1%s+diverged"), question)
     assert.same({ "sync /fake/r2", "sync /fake/r3" }, calls)
     assert.is_nil(state.phase("/fake/r1"), "a level repository is not part of the batch")
     assert.is_nil(state.phase("/fake/r4"), "a diverged repository is not part of the batch")
@@ -719,10 +719,63 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
     assert.truthy(desc and desc:find("Sync every repository", 1, true), tostring(desc))
   end)
 
+  it(
+    "gp asks with a table of commits to push, leaves a diverged repository out and names it",
+    function()
+      actions.push = fake("push")
+      local question
+      require("ui.kit").confirm = function(o)
+        question = o.question
+        o.on_answer(true)
+      end
+      local level, ahead, ahead3, diverged = record("r1"), record("r2"), record("r3"), record("r4")
+      ahead.ahead = 1
+      ahead3.ahead = 3
+      diverged.ahead, diverged.behind = 2, 5
+      view.show({ level, ahead, ahead3, diverged }, { output = "buffer" })
+
+      press("gp")
+      assert.truthy(question:find("Push 2 repositories (4 commits)?", 1, true), question)
+      assert.truthy(question:match("r3%s+main%s+%-%s+3"), question)
+      assert.truthy(question:match("TOTAL%s+0%s+4"), question)
+      assert.truthy(question:match("r4%s+main%s+5%s+2%s+diverged"), question)
+      assert.is_nil(question:match("r1%s+main"), "a level repository is not listed")
+      -- Pushes run one at a time: r3 starts once r2 is done, r1 and r4 never do.
+      assert.same({ "push /fake/r2" }, calls)
+      release("push /fake/r2", true)
+      wait_for(function()
+        return #calls == 2
+      end, "second push")
+      assert.same({ "push /fake/r2", "push /fake/r3" }, calls)
+      release("push /fake/r3", true)
+      wait_for(function()
+        return state.bulk_verb() == nil
+      end, "bulk finished")
+    end
+  )
+
+  it("gp with nothing ahead starts nothing and does not ask", function()
+    actions.push = fake("push")
+    local asked = false
+    require("ui.kit").confirm = function()
+      asked = true
+    end
+    view.show({ record("r1"), record("r2") }, { output = "buffer" })
+
+    press("gp")
+    assert.is_false(asked)
+    assert.same({}, calls)
+    assert.truthy(last_message():find("Nothing to push", 1, true), last_message())
+  end)
+
   it("push stays one at a time whatever fetch_jobs says", function()
     require("gitsuite.config").setup({ dashboard = { fetch_jobs = 4 } })
     actions.push = fake("push")
-    view.show({ record("r1"), record("r2"), record("r3") }, { output = "buffer" })
+    local rows = { record("r1"), record("r2"), record("r3") }
+    for _, r in ipairs(rows) do
+      r.ahead = 1
+    end
+    view.show(rows, { output = "buffer" })
 
     press("gp")
     wait_for(function()

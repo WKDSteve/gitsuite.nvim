@@ -1283,8 +1283,18 @@ local function _confirm_bulk(bufnr, records, verb, action_fn, indices, what)
   if _refuse_while_bulk() then return end
 
   local targets = _targets_at(records, indices)
+  local question = ("%s%s %d %s?"):format(verb:sub(1, 1):upper(), verb:sub(2), #targets, what)
+  if verb == "push" or verb == "pull" then
+    -- How many commits each repository has to move, not just how many repositories.
+    question = question
+      .. "\n\n"
+      .. table.concat(
+        require("gitsuite.features.dashboard.confirm_table").lines(records, indices),
+        "\n"
+      )
+  end
   kit.confirm({
-    question = ("%s%s %d %s?"):format(verb:sub(1, 1):upper(), verb:sub(2), #targets, what),
+    question = question,
     on_answer = function(yes)
       if yes then _run_bulk(bufnr, records, verb, action_fn, targets) end
     end,
@@ -1335,6 +1345,48 @@ local function _run_all(ctx, verb, action_fn)
     indices,
     ("repositor%s in this dashboard"):format(#indices == 1 and "y" or "ies")
   )
+end
+
+---@private
+---@internal
+---`gp`: pushes the repositories that are ahead of their upstream, marks ignored.
+---A diverged one is listed with the reason and left alone: a push of it would be
+---refused. The confirmation shows how many commits each repository pushes.
+---@param ctx DashboardRowContext
+---@return nil
+local function _push_all(ctx)
+  if _refuse_while_bulk() then return end
+  local confirm_table = require("gitsuite.features.dashboard.confirm_table")
+  local indices, skipped, n_commits = {}, {}, 0
+  for i, r in ipairs(ctx.records) do
+    local ahead = r.ahead or 0
+    if ahead > 0 then
+      if confirm_table.problem(r) then
+        skipped[#skipped + 1] = { index = i, reason = confirm_table.problem(r) }
+      else
+        indices[#indices + 1] = i
+        n_commits = n_commits + ahead
+      end
+    end
+  end
+  if #indices == 0 then
+    notify("Nothing to push: no repository is ahead of its upstream", 3)
+    return
+  end
+  local targets = _targets_at(ctx.records, indices)
+  local question = ("Push %d repositor%s (%d commit%s)?\n\n%s"):format(
+    #indices,
+    #indices == 1 and "y" or "ies",
+    n_commits,
+    n_commits == 1 and "" or "s",
+    table.concat(confirm_table.lines(ctx.records, indices, skipped), "\n")
+  )
+  kit.confirm({
+    question = question,
+    on_answer = function(yes)
+      if yes then _run_bulk(ctx.bufnr, ctx.records, "push", repo_actions.push, targets) end
+    end,
+  })
 end
 
 ---@private
@@ -1798,9 +1850,9 @@ local ROW_KEYMAPS = {
   },
   {
     keys = { "gp" },
-    desc = "Push every repository in the dashboard (marks ignored)",
+    desc = "Push the repositories ahead of their upstream, listing what cannot be pushed (marks ignored)",
     run = function(ctx)
-      _run_all(ctx, "push", repo_actions.push)
+      _push_all(ctx)
     end,
   },
   {

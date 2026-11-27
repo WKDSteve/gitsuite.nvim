@@ -84,10 +84,18 @@ function M.plan(records, scope, fetch_time)
       #all == 1 and "y" or "ies"
     ),
   }
-  if #unknown > 0 then
-    lines[#lines + 1] = ("Behind state unknown (no upstream or not fetched yet), skipped by 'Only behind': %s"):format(
-      M.names_of(records, unknown)
-    )
+  if #behind > 0 or #unknown > 0 then
+    local confirm_table = require("gitsuite.features.dashboard.confirm_table")
+    local skipped = {}
+    for _, i in ipairs(unknown) do
+      skipped[#skipped + 1] = {
+        index = i,
+        reason = records[i].has_upstream and "not fetched" or "no upstream",
+      }
+    end
+    lines[#lines + 1] = ""
+    vim.list_extend(lines, confirm_table.lines(records, behind, skipped))
+    if #unknown > 0 then lines[#lines + 1] = "NOT SYNCED rows are skipped by 'Only behind'." end
   end
 
   return {

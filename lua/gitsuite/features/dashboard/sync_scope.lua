@@ -17,6 +17,7 @@
 
 local gitfs = require("gitsuite.features.plugins.gitfs")
 local names_of = require("gitsuite.features.dashboard.pull_scope").names_of
+local confirm_table = require("gitsuite.features.dashboard.confirm_table")
 
 local M = {}
 
@@ -85,12 +86,20 @@ function M.plan(records, fetch_time)
         n_behind,
         n_ahead
       ),
-      names_of(records, targets),
+      "",
     }
+    local skipped = {}
+    for _, i in ipairs(diverged) do
+      skipped[#skipped + 1] = { index = i, reason = "diverged" }
+    end
+    for _, i in ipairs(unfetched) do
+      skipped[#skipped + 1] = { index = i, reason = "not fetched" }
+    end
+    vim.list_extend(lines, confirm_table.lines(records, targets, skipped))
   else
     lines = { "Nothing to sync: no repository is only ahead of or only behind its upstream" }
+    vim.list_extend(lines, left_out_lines(records, diverged, unfetched))
   end
-  vim.list_extend(lines, left_out_lines(records, diverged, unfetched))
 
   return {
     targets = targets,

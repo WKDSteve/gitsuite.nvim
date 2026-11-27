@@ -378,14 +378,34 @@ describe("gitsuite.features.dashboard", function()
       assert.equals(2, plan.ahead)
       assert.same({ 4 }, plan.diverged)
       assert.same({ 6 }, plan.unfetched)
-      local want = table.concat({
-        "Sync 3 repositories with something to sync (1 behind, 2 ahead)?",
-        "behind, ahead, dirty-ahead",
-        "Diverged, left alone (neither pull nor push can settle it): diverged",
-        "No fetch recorded, skipped (fetch first: gf): never",
-      }, "\n")
-      assert.equals(want, plan.message)
+      local lines = vim.split(plan.message, "\n", { plain = true })
+      assert.equals("Sync 3 repositories with something to sync (1 behind, 2 ahead)?", lines[1])
+      -- A table: one row per target with its counts, then what was left out and why.
+      local text = plan.message
+      assert.truthy(text:find("REPOSITORY", 1, true), text)
+      assert.truthy(text:match("dirty%-ahead%s+%-%s+1"), text)
+      assert.truthy(text:match("behind%s+3%s+%-"), text)
+      assert.truthy(text:match("TOTAL%s+3%s+3"), text)
+      assert.truthy(text:match("diverged%s+1%s+1%s+diverged"), text)
+      assert.truthy(text:match("never%s+%-%s+%-%s+not fetched"), text)
     end)
+
+    it(
+      "the table lines all have the same width, so the dialog keeps the columns aligned",
+      function()
+        local plan = sync_scope.plan(
+          { rec("behind", 0, 3), rec("a-longer-name", 12, 0), rec("diverged", 1, 1) },
+          fetch_time
+        )
+        local width
+        for _, l in ipairs(vim.list_slice(vim.split(plan.message, "\n", { plain = true }), 3)) do
+          if l ~= "" then
+            width = width or vim.fn.strdisplaywidth(l)
+            assert.equals(width, vim.fn.strdisplaywidth(l), l)
+          end
+        end
+      end
+    )
 
     it("a positive count is a target even without a recorded fetch", function()
       local plan = sync_scope.plan({ rec("never", 0, 2) }, fetch_time)
@@ -466,7 +486,9 @@ describe("gitsuite.features.dashboard", function()
       assert.same({ "Only behind (2)", "All (5)" }, plan.choices)
       assert.same({ 2, 5 }, plan.targets["Only behind (2)"])
       assert.same({ 1, 2, 3, 4, 5 }, plan.targets["All (5)"])
-      assert.is_not_nil(plan.question:find("no-upstream, never", 1, true))
+      assert.truthy(plan.question:match("no%-upstream%s+%-%s+%-%s+no upstream"), plan.question)
+      assert.truthy(plan.question:match("never%s+%-%s+%-%s+not fetched"), plan.question)
+      assert.truthy(plan.question:match("TOTAL%s+4"), plan.question)
     end)
 
     it("plan: scope 'all' puts 'All' first", function()
@@ -476,13 +498,12 @@ describe("gitsuite.features.dashboard", function()
 
     it("plan: no unknown line when every behind state is known", function()
       local plan = pull_scope.plan({ rec("a", 1, true), rec("b", 0, true) }, "behind", fetch_time)
-      assert.is_nil(plan.question:find("unknown", 1, true))
-      assert.equals(1, #vim.split(plan.question, "\n", { plain = true }))
+      assert.is_nil(plan.question:find("NOT SYNCED", 1, true))
     end)
 
     it("plan: a long unknown list is shortened with a count", function()
       local many = {}
-      for i = 1, pull_scope.MAX_NAMES + 3 do
+      for i = 1, require("gitsuite.features.dashboard.confirm_table").MAX_ROWS + 3 do
         many[i] = rec("r" .. i, 0, false)
       end
       local plan = pull_scope.plan(many, "behind", fetch_time)
