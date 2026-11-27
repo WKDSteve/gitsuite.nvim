@@ -638,6 +638,11 @@ describe("gitsuite.features.dashboard.view: bulk does not block settled rows", f
     assert.truthy(question:find("Update 4 repositories", 1, true), question)
     assert.truthy(question:find("As of the last fetch: 1 to pull, 1 diverged", 1, true), question)
     assert.is_nil(question:find("to push", 1, true), "update never pushes")
+    assert.is_nil(
+      question:find("left alone", 1, true),
+      "a diverged repository is reported, not skipped"
+    )
+    assert.truthy(question:find("1 diverged, reported as failed", 1, true), question)
   end)
 
   it("gS adds no summary line when nothing is known to be pending", function()

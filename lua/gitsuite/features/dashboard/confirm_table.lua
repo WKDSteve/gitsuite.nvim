@@ -194,7 +194,9 @@ function M.summary(records, indices, verb)
   if behind > 0 then parts[#parts + 1] = ("%d to pull"):format(behind) end
   if verb == "sync" and ahead > 0 then parts[#parts + 1] = ("%d to push"):format(ahead) end
   if diverged > 0 then
-    parts[#parts + 1] = ("%d diverged, left alone (gs lists them)"):format(diverged)
+    -- They are still part of the batch (the fetch runs, and the batch ends by reporting
+    -- them as failed), so "left alone" would promise a quiet skip.
+    parts[#parts + 1] = ("%d diverged, reported as failed (gs lists them)"):format(diverged)
   end
   if #parts == 0 then return nil end
   return "As of the last fetch: " .. table.concat(parts, ", ")
